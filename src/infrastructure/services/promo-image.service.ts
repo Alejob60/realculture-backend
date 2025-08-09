@@ -1,55 +1,95 @@
-import { Injectable, ForbiddenException, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UserEntity } from '../../domain/entities/user.entity';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import * as path from 'path';
+// src/api/promo-image/promo-image.controller.ts
+import {
+  Controller,
+  Post,
+  Body,
+  Req,
+  UseGuards,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
+import { MediaBridgeService } from '../../infrastructure/services/media-bridge.service';
+import { JwtAuthGuard } from '../../interfaces/guards/jwt-auth.guard';
+import { Request } from 'express';
+import { UserService } from '../../infrastructure/services/user.service';
+import { AzureBlobService } from './azure-blob.services';
 
-@Injectable()
-export class PromoImageService {
-  private readonly logger = new Logger(PromoImageService.name);
+const PLAN_CREDITS = {
+  'promo-image': {
+    FREE: 10,
+    CREATOR: 15,
+    PRO: 10,
+  },
+};
+
+@Controller('api/v1/promo-image')
+export class PromoImageController {
+  private readonly logger = new Logger(PromoImageController.name);
 
   constructor(
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
-    private readonly httpService: HttpService,
+    private readonly mediaBridge: MediaBridgeService,
+    private readonly userService: UserService,
+    private readonly azureBlobService: AzureBlobService,
   ) {}
 
-  async generatePromoImage(userId: string, prompt: string) {
-    const user = await this.userRepository.findOne({ where: { userId } });
-    if (!user) throw new ForbiddenException('Usuario no encontrado');
+  @UseGuards(JwtAuthGuard)
+  @Post()
+  async generatePromoImage(@Body() body: { prompt: string; plan: string }, @Req() req: Request) {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      const userId = (req as any).user?.userId;
 
-    const isFree = user.plan === 'FREE';
-    const cost = 10;
+      if (!token || !userId) {
+        throw new HttpException('Token inválido o usuario no identificado', HttpStatus.UNAUTHORIZED);
+      }
 
-    if (isFree && user.credits < cost) {
-      throw new ForbiddenException('No tienes suficientes créditos');
+      const user = await this.userService.findById(userId);
+      const userPlan = user?.role || 'FREE';
+
+      const serviceKey = 'promo-image';
+      const requiredCredits = PLAN_CREDITS[serviceKey]?.[userPlan] ?? null;
+
+      if (requiredCredits === null) {
+        throw new HttpException('Tu plan no permite generar imágenes promocionales', HttpStatus.FORBIDDEN);
+      }
+
+      if (!user || user.credits < requiredCredits) {
+        throw new HttpException('Créditos insuficientes', HttpStatus.FORBIDDEN);
+      }
+
+      // Llamar al microservicio que genera la imagen
+      const result = await this.mediaBridge.generatePromoImage(body, token);
+
+      // El microservicio debería devolver el nombre o ruta del archivo blob, por ejemplo:
+      // result.result.fileName = "promo-images/abc123.jpg"
+      const fileName = result?.result?.fileName;
+      if (!fileName) {
+        throw new HttpException('No se recibió el nombre del archivo generado', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+
+      // Obtener la URL SAS firmada para ese blob
+      const signedUrl = await this.azureBlobService.getSignedUrl(fileName, 3600 * 24); // 24 horas de validez
+
+      // Actualizar créditos del usuario
+      const updatedUser = await this.userService.decrementCredits(userId, requiredCredits);
+      if (!updatedUser) {
+        throw new NotFoundException('No se pudo actualizar los créditos del usuario');
+      }
+
+      return {
+        success: true,
+        result: {
+          signedUrl,
+          prompt: body.prompt,
+          fileName,
+        },
+        credits: updatedUser.credits,
+      };
+    } catch (error: any) {
+      this.logger.error('Error en generatePromoImage:', error);
+      throw error;
     }
-
-    // Descontar créditos si aplica
-    if (isFree) {
-      user.credits -= cost;
-      await this.userRepository.save(user);
-    }
-
-    // Llamada al microservicio de generación de imagen
-    const microserviceURL = 'http://localhost:4000/image/promo';
-    const response = await firstValueFrom(
-      this.httpService.post(microserviceURL, { prompt }),
-    );
-
-    const data = response.data;
-    const imageUrl = data.imageUrl;
-    const improvedPrompt = data.prompt || prompt;
-    const filename = path.basename(imageUrl); // Extraer nombre del archivo
-
-    return {
-      status: 'ok',
-      usedCredits: isFree ? cost : 0,
-      prompt: improvedPrompt,
-      imageUrl,
-      filename,
-    };
   }
 }

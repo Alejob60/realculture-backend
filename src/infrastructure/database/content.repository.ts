@@ -18,8 +18,8 @@ export class ContentRepository {
     return this.repo.find({ relations: ['creator'] });
   }
 
-  async findOne(id: string): Promise<Content | null> {
-    return this.repo.findOne({ where: { id }, relations: ['creator'] });
+  async findOne(userId: string): Promise<Content | null> {
+    return this.repo.findOne({ where: { userId }, relations: ['creator'] });
   }
 
   async findByCreator(creatorId: string): Promise<Content[]> {

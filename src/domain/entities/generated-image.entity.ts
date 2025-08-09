@@ -5,30 +5,33 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   CreateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { UserEntity } from './user.entity';
 
 @Entity('generated_images')
 export class GeneratedImageEntity {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id: string;  // PK propia y única del GeneratedImage
 
   @Column()
-  prompt: string; // ✅ Este es el prompt mejorado, no el original
+  prompt: string;
 
   @Column({ nullable: true })
-  imageUrl: string; // ✅ Renombrado desde `url` para mayor claridad
+  imageUrl: string;
 
-  @Column({ nullable: true }) // 🔥 Esto evita el error al sincronizar
+  @Column({ nullable: true })
   filename: string;
 
-  @Column({ default: 'active' }) // ✅ Puede ser: 'active', 'expired'
+  @Column({ default: 'active' })
   status: string;
 
   @Column({ type: 'timestamp', nullable: true })
-  expiresAt: Date; // ✅ Fecha de expiración basada en el plan del usuario
+  expiresAt: Date;
 
+  // FK hacia UserEntity, que tiene el id del usuario
   @ManyToOne(() => UserEntity, (user) => user.generatedImages)
+  @JoinColumn({ name: 'user_id' })
   user: UserEntity;
 
   @CreateDateColumn()

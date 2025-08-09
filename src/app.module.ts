@@ -11,7 +11,6 @@ import { UserModule } from './infrastructure/modules/user.module';
 import { AiModule } from './infrastructure/modules/ai.module';
 import { InfluencerModule } from './infrastructure/modules/influencer.module';
 import { MediaModule } from './infrastructure/modules/media.module';
-import { GalleryModule } from './infrastructure/modules/gallery.module';
 import { AudioModule } from './infrastructure/modules/audio.module';
 
 // Import all entities
@@ -51,6 +50,11 @@ import { Creator } from './domain/entities/creator.entity';
         synchronize: false,
         logging: true,
         migrations: ['dist/migrations/*.js'],
+        // --- AÑADIR ESTA SECCIÓN PARA HABILITAR SSL ---
+        ssl: {
+          rejectUnauthorized: false,
+        },
+        // -------------------------------------------
       }),
       inject: [ConfigService],
     }),
@@ -70,7 +74,6 @@ import { Creator } from './domain/entities/creator.entity';
     AiModule,
     InfluencerModule,
     MediaModule,
-    GalleryModule,
     AudioModule,
   ],
   controllers: [HealthController],

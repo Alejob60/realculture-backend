@@ -26,7 +26,7 @@ export class UserEntity {
   @Column({ name: 'password', nullable: true })
   password?: string;
 
-  @Column({ name: 'google_id', nullable: true })
+  @Column({ name: 'googleId', nullable: true })
   googleId?: string;
 
   @Column({ name: 'role', type: 'enum', enum: UserRole, default: UserRole.FREE })
@@ -41,7 +41,7 @@ export class UserEntity {
   @Column({ name: 'credits', type: 'int', default: 25 })
   credits: number;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 
   @OneToMany(() => Content, (content) => content.creator)

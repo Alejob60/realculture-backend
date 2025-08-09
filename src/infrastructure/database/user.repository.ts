@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../domain/entities/user.entity';
-import { UserRole } from '../../domain/enums/user-role.enum'; // ✅ Asegúrate de tener este enum
+import { UserRole } from '../../domain/enums/user-role.enum';
 
 @Injectable()
 export class UserRepository {
@@ -19,7 +19,14 @@ export class UserRepository {
   async findByEmail(email: string): Promise<UserEntity | null> {
     return this.repo
       .createQueryBuilder('user')
-      .addSelect('user.password') // ⚠️ necesario si password tiene select: false
+      .select([
+        'user.userId',
+        'user.email',
+        'user.name',
+        'user.password', // Explícitamente seleccionado para la comparación
+        'user.role',
+        'user.credits',
+      ])
       .where('user.email = :email', { email })
       .getOne();
   }
@@ -32,12 +39,11 @@ export class UserRepository {
     return this.repo.find();
   }
 
-  // ✅ TIPADO CORRECTO PARA role
   async findAllByRole(role: UserRole): Promise<UserEntity[]> {
     return this.repo.find({ where: { role } });
   }
 
   async findById(userId: string): Promise<UserEntity | null> {
-    return this.repo.findOne({ where: { userId: userId } });
+    return this.repo.findOne({ where: { userId } });
   }
 }

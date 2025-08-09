@@ -18,7 +18,7 @@ export class InfluencerRepository {
     return this.repo.find({ relations: ['products'] });
   }
 
-  async findById(id: string): Promise<InfluencerEntity | null> {
-    return this.repo.findOne({ where: { id }, relations: ['products'] });
+  async findById(userId: string): Promise<InfluencerEntity | null> {
+    return this.repo.findOne({ where: { userId }, relations: ['products'] });
   }
 }

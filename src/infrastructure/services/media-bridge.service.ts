@@ -18,20 +18,27 @@ export class MediaBridgeService {
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   }
 
-  async generatePromoImage(data: {
-    prompt: string;
-    plan: string;
-    textOverlay?: string;
-  }): Promise<any> {
+  async generatePromoImage(
+    data: { prompt: string; plan: string; textOverlay?: string },
+    token?: string,
+  ): Promise<any> {
     try {
+      const config = {
+        headers: { 'Content-Type': 'application/json' } as any,
+      };
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
       const response = await axios.post(
         `${this.generatorUrl}/media/image`,
         data,
-        { headers: { 'Content-Type': 'application/json' } },
+        config,
       );
       return response.data;
-    } catch (error) {
-      this.logger.error('❌ Error al generar imagen (bridge):', error.message);
+    } catch (error: any) {
+      const message =
+        error.response?.data?.message || error.message || 'Error desconocido';
+      this.logger.error(`❌ Error al generar imagen (bridge): ${message}`);
       throw error;
     }
   }

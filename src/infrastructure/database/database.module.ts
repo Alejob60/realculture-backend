@@ -1,6 +1,8 @@
-
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+
+// Entities
+import { UserEntity } from '../../domain/entities/user.entity';
 import { Content } from '../../domain/entities/content.entity';
 import { Creator } from '../../domain/entities/creator.entity';
 import { GeneratedAudioEntity } from '../../domain/entities/generated-audio.entity';
@@ -9,14 +11,17 @@ import { GeneratedMusicEntity } from '../../domain/entities/generated-music.enti
 import { GeneratedVideoEntity } from '../../domain/entities/generated-video.entity';
 import { InfluencerEntity } from '../../domain/entities/influencer.entity';
 import { Product } from '../../domain/entities/product.entity';
-import { UserEntity } from '../../domain/entities/user.entity';
+
+// Custom Repositories
+import { UserRepository } from './user.repository';
 import { ContentRepository } from './content.repository';
 import { InfluencerRepository } from './influencer.repository';
-import { UserRepository } from './user.repository';
+import { GeneratedImageRepository } from './generated-image.repository';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      UserEntity,
       Content,
       Creator,
       GeneratedAudioEntity,
@@ -25,10 +30,19 @@ import { UserRepository } from './user.repository';
       GeneratedVideoEntity,
       InfluencerEntity,
       Product,
-      UserEntity,
     ]),
   ],
-  providers: [ContentRepository, InfluencerRepository, UserRepository],
-  exports: [ContentRepository, InfluencerRepository, UserRepository],
+  providers: [
+    UserRepository,
+    ContentRepository,
+    InfluencerRepository,
+    GeneratedImageRepository,
+  ],
+  exports: [
+    UserRepository,
+    ContentRepository,
+    InfluencerRepository,
+    GeneratedImageRepository,
+  ],
 })
 export class DatabaseModule {}

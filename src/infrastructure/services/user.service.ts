@@ -1,64 +1,27 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { UserEntity } from '../../domain/entities/user.entity';
 import { UserRole } from 'src/domain/enums/user-role.enum';
+import { UserRepository } from '../database/user.repository';
 
-const PLAN_CREDITS = {
-  'promo-image': {
-    FREE: 10,
-    CREATOR: 15,
-    PRO: 10,
-  },
-  'promo-video': {
-    FREE: 25,
-    CREATOR: 25,
-    PRO: 15,
-  },
-  audio: {
-    FREE: 5,
-    CREATOR: 5,
-    PRO: 0,
-  },
-  subtitles: {
-    FREE: 10,
-    CREATOR: 10,
-    PRO: 5,
-  },
-  'ai-agent': {
-    FREE: null,
-    CREATOR: 150,
-    PRO: 150,
-  },
-  'campaign-automation': {
-    FREE: null,
-    CREATOR: 40,
-    PRO: 20,
-  },
-  avatar: {
-    FREE: null,
-    CREATOR: null,
-    PRO: 150,
-  },
-};
-
+@Injectable()
 export class UserService {
-  constructor(
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
-  ) {}
+  constructor(private readonly userRepository: UserRepository) {}
 
   async getCredits(userId: string) {
-    const user = await this.userRepository.findOneBy({ userId: userId });
+    const user = await this.userRepository.findById(userId);
     return { credits: user?.credits ?? 0 };
   }
 
   async findById(userId: string): Promise<UserEntity | null> {
-    return await this.userRepository.findOneBy({ userId: userId });
+    return await this.userRepository.findById(userId);
   }
 
   async upgradePlan(userId: string, newPlan: 'CREATOR' | 'PRO') {
-    const user = await this.userRepository.findOneBy({ userId: userId });
+    const user = await this.userRepository.findById(userId);
     if (!user) throw new Error('Usuario no encontrado');
 
     const planCredits = {
@@ -79,17 +42,18 @@ export class UserService {
       plan: user.role,
     };
   }
-  async save(user: UserEntity): Promise<void> {
-    await this.userRepository.save(user);
+  async save(user: UserEntity): Promise<UserEntity> {
+    return await this.userRepository.save(user);
   }
   async setCredits(userId: string, credits: number) {
-    // Si usas TypeORM
-    await this.userRepository.update({ userId: userId }, { credits });
+    const user = await this.userRepository.findById(userId);
+    if (user) {
+      user.credits = credits;
+      await this.userRepository.save(user);
+    }
   }
   async decrementCredits(userId: string, amount: number) {
-    const user = await this.userRepository.findOne({
-      where: { userId: userId },
-    });
+    const user = await this.userRepository.findById(userId);
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
@@ -104,11 +68,10 @@ export class UserService {
     return this.userRepository.save(user);
   }
   async findByEmail(email: string): Promise<UserEntity | null> {
-    return this.userRepository.findOne({ where: { email } });
+    return this.userRepository.findByEmail(email);
   }
 
   async create(data: Partial<UserEntity>): Promise<UserEntity> {
-    const user = this.userRepository.create(data);
-    return await this.userRepository.save(user);
+    return await this.userRepository.create(data);
   }
 }
