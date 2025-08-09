@@ -11,37 +11,37 @@ import { UserRole } from '../enums/user-role.enum';
 import { GeneratedVideoEntity } from './generated-video.entity';
 import { GeneratedAudioEntity } from './generated-audio.entity';
 import { GeneratedMusicEntity } from './generated-music.entity';
-// src/domain/entities/user.entity.ts
+
 @Entity('users')
 export class UserEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid', { name: 'user_id' })
   userId: string;
 
-  @Column()
+  @Column({ name: 'email' })
   email: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'name', nullable: true })
   name?: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'password', nullable: true })
   password?: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'google_id', nullable: true })
   googleId?: string;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.FREE })
+  @Column({ name: 'role', type: 'enum', enum: UserRole, default: UserRole.FREE })
   role: UserRole;
 
-  @Column({ default: 'FREE' }) // ✅ Nuevo: campo 'plan'
+  @Column({ name: 'plan', default: 'FREE' })
   plan: string;
 
-  @Column({ nullable: true }) // ✅ Nuevo: campo 'picture' (avatar opcional)
+  @Column({ name: 'avatar', nullable: true })
   picture?: string;
 
-  @Column({ type: 'int', default: 25 })
+  @Column({ name: 'credits', type: 'int', default: 25 })
   credits: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
   @OneToMany(() => Content, (content) => content.creator)

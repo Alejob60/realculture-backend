@@ -44,7 +44,7 @@ export class ContentUseCase {
     createdAt: Date;
   }): Promise<Content> {
     const content: Partial<Content> = {
-      userId: data.userId,
+      creatorId: data.userId,  // CORRECCIÓN: usa creatorId, no userId
       type: data.type as 'image' | 'audio' | 'video' | 'text' | 'other',
       description: data.prompt,
       mediaUrl: data.url,
@@ -55,4 +55,5 @@ export class ContentUseCase {
 
     return this.contentRepository.create(content);
   }
+
 }
