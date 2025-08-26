@@ -1,196 +1,142 @@
-// src/infrastructure/services/video.service.ts
-
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
-import fetch from 'node-fetch';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, StorageSharedKeyCredential } from '@azure/storage-blob';
+import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
-import { BlobServiceClient, StorageSharedKeyCredential } from '@azure/storage-blob';
+import * as util from 'util';
+import { exec } from 'child_process';
+import { GenerateVideoDto } from '../../interfaces/dto/video-generation.dto';
 
-interface GenerateVideoParams {
-  userId: string;
-  prompt: string;
-  n_seconds: number;
-  useVoice: boolean;
-  useSubtitles: boolean;
-  useMusic: boolean;
-  useSora: boolean;
-}
+const execPromise = util.promisify(exec);
 
 @Injectable()
 export class VideoService {
   private readonly logger = new Logger(VideoService.name);
 
-  // Variables de entorno para Azure Sora y Blob Storage
-  private soraUrl = process.env.AZURE_SORA_URL;
-  private soraApiKey = process.env.AZURE_SORA_API_KEY;
-  private soraApiVersion = process.env.AZURE_SORA_API_VERSION || '1.0';
+  private readonly blobServiceClient = BlobServiceClient.fromConnectionString(
+    process.env.AZURE_STORAGE_CONNECTION_STRING!,
+  );
 
-  private blobAccount = process.env.AZURE_BLOB_ACCOUNT_NAME;
-  private blobKey = process.env.AZURE_BLOB_ACCOUNT_KEY;
-  private blobContainer = process.env.AZURE_BLOB_CONTAINER || 'videos';
+  private readonly accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME!;
+  private readonly accountKey = process.env.AZURE_STORAGE_KEY!;
+  private readonly containerVideo = process.env.AZURE_STORAGE_CONTAINER_VIDEO!;
+  private readonly containerAudio = process.env.AZURE_STORAGE_CONTAINER_AUDIO!;
+  private readonly containerSubtitle = process.env.AZURE_STORAGE_CONTAINER_SUBTITLE!;
+  private readonly videoGeneratorUrl = process.env.VIDEO_GENERATOR_URL!;
 
-  private blobServiceClient: BlobServiceClient;
-
-  constructor() {
-    if (!this.soraUrl || !this.soraApiKey) {
-      this.logger.error('Faltan configuraciones para Azure Sora');
-      throw new Error('Configuración de Azure Sora incompleta');
-    }
-
-    if (!this.blobAccount || !this.blobKey) {
-      this.logger.error('Faltan configuraciones para Azure Blob Storage');
-      throw new Error('Configuración de Azure Blob Storage incompleta');
-    }
-
-    const credential = new StorageSharedKeyCredential(this.blobAccount, this.blobKey);
-    const blobUrl = `https://${this.blobAccount}.blob.core.windows.net`;
-    this.blobServiceClient = new BlobServiceClient(blobUrl, credential);
-  }
-
-  async generateFullVideo(params: GenerateVideoParams): Promise<any> {
-    this.logger.log(`Iniciando generación de video para usuario ${params.userId}`);
-
-    // 1. Crear job en Azure Sora
-    const jobPayload = {
-      prompt: params.prompt,
-      n_seconds: params.n_seconds,
-      useVoice: params.useVoice,
-      useSubtitles: params.useSubtitles,
-      useMusic: params.useMusic,
-      useSora: params.useSora,
-    };
-
-    let jobId: string;
-
+  /** ------------------- FLUJO PRINCIPAL ------------------- */
+  async generateVideo(dto: GenerateVideoDto, userId: string): Promise<{
+    videoUrl: string;
+    audioUrl?: string | null;
+    subtitleUrl?: string | null;
+  }> {
     try {
-      const createResponse = await fetch(`${this.soraUrl}/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': this.soraApiKey,
-          'api-version': this.soraApiVersion,
-        },
-        body: JSON.stringify(jobPayload),
-      });
+      this.validateEnvVars();
 
-      if (!createResponse.ok) {
-        const errText = await createResponse.text();
-        this.logger.error(`Error creando job en Sora: ${errText}`);
-        throw new HttpException('Error creando job en Sora', HttpStatus.INTERNAL_SERVER_ERROR);
+      this.logger.log(`🎬 Iniciando procesamiento de video para usuario: ${userId}`);
+
+      // Garantizar valores booleanos
+      const payload = {
+        prompt: dto.prompt,
+        useVoice: dto.useVoice ?? true,
+        useSubtitles: dto.useSubtitles ?? true,
+        useMusic: dto.useMusic ?? false,
+        useSora: dto.useSora ?? true,
+      };
+
+      // 1️⃣ Llamada al microservicio video-generator
+      const response = await axios.post(`${this.videoGeneratorUrl}/video/generate`, payload);
+      const { videoUrl: tempVideoUrl, audioUrl: tempAudioUrl, subtitleUrl: tempSubtitleUrl } = response.data;
+
+      // 2️⃣ Descargar archivos temporalmente
+      const videoPath = await this.downloadFile(tempVideoUrl, 'video.mp4');
+      let audioPath: string | null = null;
+      let subtitlePath: string | null = null;
+
+      if (payload.useVoice && tempAudioUrl) audioPath = await this.downloadFile(tempAudioUrl, 'voice.mp3');
+      if (payload.useSubtitles && tempSubtitleUrl) subtitlePath = await this.downloadFile(tempSubtitleUrl, 'subtitles.srt');
+
+      // 3️⃣ Unir video + audio + subtítulos con FFmpeg si es necesario
+      let finalVideoPath = videoPath;
+      if (audioPath || subtitlePath) {
+        finalVideoPath = await this.mergeWithFFmpeg(videoPath, audioPath, subtitlePath);
       }
 
-      const createData = await createResponse.json();
-      jobId = createData.jobId;
-      this.logger.log(`Job creado con ID: ${jobId}`);
-    } catch (error) {
-      this.logger.error('Error en llamada a Sora:', error);
-      throw error;
+      // 4️⃣ Subir a Azure Blob Storage
+      const videoBlobUrl = await this.uploadToBlob(finalVideoPath, this.containerVideo);
+      const audioBlobUrl = audioPath ? await this.uploadToBlob(audioPath, this.containerAudio) : null;
+      const subtitleBlobUrl = subtitlePath ? await this.uploadToBlob(subtitlePath, this.containerSubtitle) : null;
+
+      // 5️⃣ Generar URLs SAS
+      const signedVideoUrl = await this.generateSasUrl(this.containerVideo, path.basename(finalVideoPath));
+      const signedAudioUrl = audioPath ? await this.generateSasUrl(this.containerAudio, path.basename(audioPath)) : null;
+      const signedSubtitleUrl = subtitlePath ? await this.generateSasUrl(this.containerSubtitle, path.basename(subtitlePath)) : null;
+
+      // 6️⃣ Limpiar archivos temporales
+      this.cleanTempFiles([videoPath, audioPath, subtitlePath, finalVideoPath]);
+
+      return { videoUrl: signedVideoUrl, audioUrl: signedAudioUrl, subtitleUrl: signedSubtitleUrl };
+    } catch (error: any) {
+      this.logger.error(`❌ Error en generateVideo: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Error al generar el video: ${error.message}`);
     }
-
-    // 2. Esperar hasta que el job esté completado (polling)
-    let jobStatus = 'pending';
-    let resultData: any = null;
-
-    while (jobStatus === 'pending' || jobStatus === 'processing') {
-      await new Promise((r) => setTimeout(r, 5000)); // Esperar 5 segundos
-
-      try {
-        const statusResponse = await fetch(`${this.soraUrl}/status/${jobId}`, {
-          headers: {
-            'api-key': this.soraApiKey,
-            'api-version': this.soraApiVersion,
-          },
-        });
-
-        if (!statusResponse.ok) {
-          const errText = await statusResponse.text();
-          this.logger.error(`Error obteniendo status del job: ${errText}`);
-          throw new HttpException('Error obteniendo estado del job', HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-
-        const statusData = await statusResponse.json();
-        jobStatus = statusData.status;
-
-        this.logger.log(`Estado del job ${jobId}: ${jobStatus}`);
-
-        if (jobStatus === 'failed') {
-          this.logger.error(`Job ${jobId} falló en procesamiento`);
-          throw new HttpException('La generación del video falló', HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-
-        if (jobStatus === 'completed') {
-          resultData = statusData.result;
-          break;
-        }
-      } catch (error) {
-        this.logger.error('Error en polling de job:', error);
-        throw error;
-      }
-    }
-
-    if (!resultData) {
-      throw new HttpException('No se obtuvo resultado del job', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    // 3. Descargar video (puedes guardar localmente o subir directamente a Blob)
-    // Aquí asumimos que resultData tiene un campo 'videoUrl' con el link para descarga
-    const videoUrl = resultData.videoUrl;
-    if (!videoUrl) {
-      this.logger.error('No se recibió URL de video en resultado');
-      throw new HttpException('Resultado no contiene URL de video', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    // Descargar el video y subirlo a Blob Storage
-    const videoBuffer = await this.downloadFile(videoUrl);
-    const blobName = `videos/${params.userId}/video_${Date.now()}.mp4`;
-
-    const uploadedUrl = await this.uploadToBlob(blobName, videoBuffer, 'video/mp4');
-
-    // Aquí podrías también generar y subir voz (TTS) y subtítulos si usas esos flags
-
-    // 4. Retornar la info para backend principal
-    return {
-      videoUrl: uploadedUrl,
-      prompt: params.prompt,
-      // otros datos útiles: duración, subtítulos, voz, etc.
-    };
   }
 
-  private async downloadFile(url: string): Promise<Buffer> {
-    this.logger.log(`Descargando archivo desde URL: ${url}`);
+  /** ------------------- MÉTODOS PRIVADOS ------------------- */
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      const errText = await response.text();
-      this.logger.error(`Error descargando archivo: ${errText}`);
-      throw new HttpException('Error descargando archivo', HttpStatus.INTERNAL_SERVER_ERROR);
+  private validateEnvVars() {
+    const requiredVars = [
+      'AZURE_STORAGE_CONNECTION_STRING',
+      'AZURE_STORAGE_ACCOUNT_NAME',
+      'AZURE_STORAGE_KEY',
+      'AZURE_STORAGE_CONTAINER_VIDEO',
+      'AZURE_STORAGE_CONTAINER_AUDIO',
+      'AZURE_STORAGE_CONTAINER_SUBTITLE',
+      'VIDEO_GENERATOR_URL',
+    ];
+    for (const v of requiredVars) {
+      if (!process.env[v]) throw new Error(`Variable de entorno faltante: ${v}`);
     }
-
-    const buffer = await response.buffer();
-    return buffer;
   }
 
-  private async uploadToBlob(blobName: string, data: Buffer, contentType: string): Promise<string> {
-    this.logger.log(`Subiendo archivo a Blob Storage: ${blobName}`);
+  private async downloadFile(fileUrl: string, fileName: string): Promise<string> {
+    const tmpDir = path.join(__dirname, '../../tmp');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+    const filePath = path.join(tmpDir, fileName);
+    const response = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+    fs.writeFileSync(filePath, response.data);
+    return filePath;
+  }
 
-    const containerClient = this.blobServiceClient.getContainerClient(this.blobContainer);
+  private async mergeWithFFmpeg(videoPath: string, audioPath: string | null, subtitlePath: string | null): Promise<string> {
+    const outputPath = path.join(__dirname, '../../tmp', 'final-video.mp4');
+    let cmd = `ffmpeg -i "${videoPath}"`;
+    if (audioPath) cmd += ` -i "${audioPath}" -c:v copy -c:a aac`;
+    if (subtitlePath) cmd += ` -vf subtitles="${subtitlePath}"`;
+    cmd += ` "${outputPath}"`;
+    await execPromise(cmd);
+    return outputPath;
+  }
+
+  private async uploadToBlob(localPath: string, containerName: string): Promise<string> {
+    const containerClient = this.blobServiceClient.getContainerClient(containerName);
+    await containerClient.createIfNotExists();
+    const blobName = path.basename(localPath);
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-
-    await blockBlobClient.uploadData(data, {
-      blobHTTPHeaders: { blobContentType: contentType },
-    });
-
-    const sasUrl = await this.generateSasUrl(blobName);
-    this.logger.log(`Archivo subido y accesible en: ${sasUrl}`);
-
-    return sasUrl;
+    await blockBlobClient.uploadFile(localPath);
+    return blockBlobClient.url;
   }
 
-  private async generateSasUrl(blobName: string): Promise<string> {
-    // Aquí implementa la generación de SAS si es necesario,
-    // o devuelve URL pública si el contenedor es público
+  private async generateSasUrl(containerName: string, blobName: string): Promise<string> {
+    const sharedKeyCredential = new StorageSharedKeyCredential(this.accountName, this.accountKey);
+    const sasToken = generateBlobSASQueryParameters(
+      { containerName, blobName, permissions: BlobSASPermissions.parse('r'), expiresOn: new Date(Date.now() + 3600 * 1000) },
+      sharedKeyCredential,
+    ).toString();
+    return `https://${this.accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
+  }
 
-    // Para simplificar, devolver URL pública (ajusta según seguridad)
-    return `https://${this.blobAccount}.blob.core.windows.net/${this.blobContainer}/${blobName}`;
+  private cleanTempFiles(paths: (string | null)[]) {
+    for (const p of paths) if (p && fs.existsSync(p)) fs.unlinkSync(p);
   }
 }

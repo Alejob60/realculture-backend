@@ -12,6 +12,7 @@ import { AiModule } from './infrastructure/modules/ai.module';
 import { InfluencerModule } from './infrastructure/modules/influencer.module';
 import { MediaModule } from './infrastructure/modules/media.module';
 import { AudioModule } from './infrastructure/modules/audio.module';
+import { VideoModule } from './infrastructure/modules/video.module';
 
 // Import all entities
 import { UserEntity } from './domain/entities/user.entity';
@@ -75,6 +76,7 @@ import { Creator } from './domain/entities/creator.entity';
     InfluencerModule,
     MediaModule,
     AudioModule,
+    VideoModule, // Añadir el módulo de Video
   ],
   controllers: [HealthController],
   providers: [],

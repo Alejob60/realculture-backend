@@ -3,6 +3,7 @@ import { LessThan, MoreThan } from 'typeorm';
 import { AzureBlobService } from '../services/azure-blob.services';
 import { GeneratedImageRepository } from '../database/generated-image.repository';
 import { UserRepository } from '../database/user.repository';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @Injectable()
 export class GeneratedImageService {
@@ -46,20 +47,17 @@ export class GeneratedImageService {
     };
   }
 
-  async getImagesByUserId(userId: string) {
+  async getImagesByUserId(userId: string, paginationDto: PaginationDto) {
     const user = await this.userRepository.findById(userId);
     if (!user) throw new Error('Usuario no encontrado');
 
-    const now = new Date();
-
-    const images = await this.generatedImageRepository.find({
-      where: {
-        user: { userId: user.userId },
-        expiresAt: MoreThan(now),
-      },
-      order: { createdAt: 'DESC' },
-      relations: ['user'],
-    });
+    const { page = 1, limit = 10 } = paginationDto;
+    const { data: images, total } =
+      await this.generatedImageRepository.findAndCountByUserId(
+        userId,
+        page,
+        limit,
+      );
 
     const result = await Promise.all(
       images.map(async (img) => {
@@ -78,7 +76,13 @@ export class GeneratedImageService {
       }),
     );
 
-    return result;
+    return {
+      data: result,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async deleteExpiredImages() {

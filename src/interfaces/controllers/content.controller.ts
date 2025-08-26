@@ -8,12 +8,15 @@ import {
   UseGuards,
   Put,
   Delete,
+  Query,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ContentService } from '../../infrastructure/services/content.service';
 import { Content } from '../../domain/entities/content.entity';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { Request } from 'express';
 import { UserEntity } from '../../domain/entities/user.entity';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @Controller('content')
 @UseGuards(JwtAuthGuard)
@@ -30,8 +33,8 @@ export class ContentController {
   }
 
   @Get()
-  async findAll(): Promise<Content[]> {
-    return this.contentService.findAll();
+  async findAll(@Query(new ValidationPipe({ transform: true })) paginationDto: PaginationDto) {
+    return this.contentService.findAll(paginationDto);
   }
 
   @Get(':id')

@@ -2,44 +2,57 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import * as dotenv from 'dotenv';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import * as cookieParser from 'cookie-parser';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
-  // Cargar variables de entorno
-  dotenv.config();
-
-  // Crear la aplicación
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Seguridad con cabeceras HTTP
-  app.use(helmet());
-
-  // Habilitar CORS de forma controlada (ajusta esto en producción)
-  app.enableCors({
-    origin: ['http://localhost:3000'], // Cambiar por dominio de frontend en producción
-    methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  });
-  app.use(cookieParser());
-
-  // Protección contra abuso con rate limiting
+  // 1. Configuración de Helmet (primero)
+  // Se ajusta para que no interfiera con políticas de origen cruzado que gestionaremos nosotros.
   app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutos
-      max: 100, // Máximo 100 peticiones por IP
-      message: '⚠️ Demasiadas solicitudes. Intenta nuevamente en unos minutos.',
+    helmet({
+      crossOriginEmbedderPolicy: false,
+      crossOriginOpenerPolicy: false,
     }),
   );
 
-  // Servir archivos estáticos desde la carpeta public
+  // 2. Configuración de CORS (muy explícita)
+  app.enableCors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:4200',
+      'https://misybot.com',
+      'https://www.misybot.com',
+      'https://realculture.misybot.com',
+      'https://realculture-app.azurewebsites.net',
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+    allowedHeaders: 'Content-Type, Authorization, X-Requested-With, Accept',
+    preflightContinue: false,
+    optionsSuccessStatus: 204, // Responde con 204 a las peticiones OPTIONS (preflight)
+  });
+
+  // 3. Pipes Globales
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  // 4. Configuración de Swagger
+  const config = new DocumentBuilder()
+    .setTitle('RealCulture AI API')
+    .setDescription('The RealCulture AI API description')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
+
+  // 5. Assets estáticos
   app.useStaticAssets(join(__dirname, '..', 'public'));
 
-  // Verificar conexión a base de datos
+  // 6. Verificación de la Base de Datos
   const dataSource = app.get(DataSource);
   if (dataSource.isInitialized) {
     console.log('✅ Conexión a la base de datos establecida correctamente.');
@@ -47,11 +60,11 @@ async function bootstrap() {
     console.error('❌ Fallo al conectar a la base de datos.');
   }
 
-  // Levantar el servidor en el puerto especificado
-  await app.listen(process.env.PORT || 3001);
-  console.log(
-    `🚀 Backend listo en http://localhost:${process.env.PORT || 3001}`,
-  );
+  // 7. Iniciar la aplicación
+  const port = process.env.PORT || 3001;
+  await app.listen(port, '0.0.0.0');
+  console.log(`🚀 Backend listo en http://localhost:${port}`);
+  console.log(`✅ CORS habilitado para: https://misybot.com y otros orígenes configurados.`);
 }
 
 bootstrap();

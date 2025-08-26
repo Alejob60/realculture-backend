@@ -6,13 +6,12 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-
 import { UserEntity } from './user.entity';
 
 @Entity('contents')
 export class Content {
   @PrimaryGeneratedColumn('uuid')
-  userId: string;
+  id: string; // ✅ Cambié userId por id (porque esto es el ID del contenido, no del usuario)
 
   @Column()
   title: string;
@@ -21,10 +20,13 @@ export class Content {
   description: string;
 
   @Column({ nullable: true, name: 'media_url' })
-  mediaUrl?: string;
+  mediaUrl?: string; // URL pública del archivo (opcional)
+
+  @Column({ nullable: true, name: 'blob_path' })
+  blobPath?: string; // ✅ Ruta interna en Azure Blob Storage (p.ej., "user-123/video1.mp4")
 
   @Column({ type: 'int', nullable: true })
-  duration?: number; // en segundos (opcional para audio/video)
+  duration?: number; // En segundos (para audio/video)
 
   @Column({ default: 'other' })
   type: 'image' | 'audio' | 'video' | 'text' | 'other';

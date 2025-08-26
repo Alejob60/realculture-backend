@@ -10,10 +10,6 @@ export class ContentUseCase {
     return this.contentRepository.create(contentData);
   }
 
-  findAll(): Promise<Content[]> {
-    return this.contentRepository.findAll();
-  }
-
   findAllByCreator(creatorId: string): Promise<Content[]> {
     return this.contentRepository.findByCreator(creatorId);
   }

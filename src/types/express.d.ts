@@ -1,8 +1,13 @@
 // src/types/express.d.ts
-import { UserEntity } from '../domain/entities/user.entity';
 
-declare module 'express' {
-  export interface Request {
-    user?: UserEntity;
+import { UserEntity } from '../../domain/entities/user.entity';
+
+// Extiende la interfaz Request del namespace Express
+declare global {
+  namespace Express {
+    export interface Request {
+      // Añade la propiedad 'user' a la interfaz Request
+      user?: UserEntity;
+    }
   }
 }

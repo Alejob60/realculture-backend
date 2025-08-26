@@ -86,6 +86,60 @@ export class AzureBlobService {
   }
 
   /**
+   * Sube un buffer a un contenedor y blob específicos.
+   */
+  async uploadBufferToContainer(
+    buffer: Buffer,
+    blobName: string,
+    containerName: string,
+    contentType?: string,
+  ): Promise<string> {
+    const containerClient =
+      this.blobServiceClient.getContainerClient(containerName);
+    await containerClient.createIfNotExists(); // O 'private'
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
+    await blockBlobClient.upload(buffer, buffer.length, {
+      blobHTTPHeaders: { blobContentType: contentType },
+    });
+
+    this.logger.log(
+      `📤 Buffer subido a ${containerName}/${blobName}`,
+    );
+    return blockBlobClient.url;
+  }
+
+  /**
+   * Devuelve una URL firmada SAS para un blob en un contenedor específico.
+   */
+  async getSignedUrlForContainer(
+    containerName: string,
+    blobName: string,
+    expiresInSeconds = 86400,
+  ): Promise<string> {
+    const containerClient =
+      this.blobServiceClient.getContainerClient(containerName);
+    const blobClient = containerClient.getBlobClient(blobName);
+
+    const expiresOn = new Date(Date.now() + expiresInSeconds * 1000);
+
+    const sasToken = generateBlobSASQueryParameters(
+      {
+        containerName: containerName,
+        blobName: blobName,
+        permissions: BlobSASPermissions.parse('r'), // 'r' for read
+        expiresOn,
+        protocol: SASProtocol.Https,
+      },
+      this.sharedKeyCredential,
+    ).toString();
+
+    const signedUrl = `${blobClient.url}?${sasToken}`;
+    this.logger.log(`🔐 URL firmada generada para ${containerName}/${blobName}`);
+    return signedUrl;
+  }
+
+  /**
    * Elimina un archivo del contenedor de Azure.
    */
   async deleteBlob(filename: string): Promise<void> {
@@ -101,5 +155,11 @@ export class AzureBlobService {
     } else {
       this.logger.warn(`⚠️ Blob no encontrado para eliminar: ${filename}`);
     }
+  }
+
+  async blobExists(containerName: string, blobName: string): Promise<boolean> {
+    const containerClient = this.blobServiceClient.getContainerClient(containerName);
+    const blobClient = containerClient.getBlobClient(blobName);
+    return await blobClient.exists();
   }
 }

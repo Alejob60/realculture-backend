@@ -13,6 +13,7 @@ import {
   Logger,
   Query,
   Res,
+  ValidationPipe,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
@@ -23,6 +24,7 @@ import { HttpService } from '@nestjs/axios';
 import { MediaBridgeService } from '../../infrastructure/services/media-bridge.service';
 import { Public } from 'src/common/decorators/public.decorator';
 import { AzureBlobService } from '../../infrastructure/services/azure-blob.services';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('media')
@@ -39,7 +41,7 @@ export class MediaController {
   ) {}
 
   private extractUserData(req: Request): { userId: string; token: string } {
-    const userId = req.user?.['userId'];
+    const userId = (req.user as any)?.userId;
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!userId || !token) {
       throw new UnauthorizedException(
@@ -130,15 +132,22 @@ export class MediaController {
     return {
       success: true,
       message: `✅ ${type.toUpperCase()} generado correctamente`,
-      result: { ...(result?.result || {}) }, // 🔁 Aquí se incluye filename
+      result: { ...(result?.result || {}) },
       credits: updatedUser.credits,
     };
   }
 
   @Get('images')
-  async getImages(@Req() req: Request) {
+  async getImages(
+    @Req() req: Request,
+    @Query(new ValidationPipe({ transform: true }))
+    paginationDto: PaginationDto,
+  ) {
     const userId = (req.user as any).sub;
-    const images = await this.imageService.getImagesByUserId(userId);
+    const images = await this.imageService.getImagesByUserId(
+      userId,
+      paginationDto,
+    );
     return { success: true, result: images };
   }
 
@@ -175,12 +184,17 @@ export class MediaController {
 
   @Get('/signed-image/:filename')
   async getSignedImageUrl(@Param('filename') filename: string) {
-    const signedUrl = await this.azureBlobService.getSignedUrl(filename, 86400); // 1 día
+    const signedUrl = await this.azureBlobService.getSignedUrl(filename, 86400);
     return { url: signedUrl };
   }
+
   @Get('my-images')
   @UseGuards(JwtAuthGuard)
-  async getMyImages(@Req() req: Request) {
+  async getMyImages(
+    @Req() req: Request,
+    @Query(new ValidationPipe({ transform: true }))
+    paginationDto: PaginationDto,
+  ) {
     const userId = (req.user as any)?.sub;
     if (!userId) {
       throw new UnauthorizedException(
@@ -188,7 +202,10 @@ export class MediaController {
       );
     }
 
-    const images = await this.imageService.getImagesByUserId(userId);
+    const images = await this.imageService.getImagesByUserId(
+      userId,
+      paginationDto,
+    );
     return images;
   }
 }

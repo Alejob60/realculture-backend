@@ -46,4 +46,8 @@ export class UserRepository {
   async findById(userId: string): Promise<UserEntity | null> {
     return this.repo.findOne({ where: { userId } });
   }
+
+  async update(userId: string, data: Partial<UserEntity>): Promise<void> {
+    await this.repo.update(userId, data);
+  }
 }

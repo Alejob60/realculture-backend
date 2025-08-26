@@ -7,11 +7,14 @@ import {
   Patch,
   Body,
   BadRequestException,
+  Query,
+  ValidationPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RequestWithUser } from 'src/types/request-with-user';
 import { GeneratedImageService } from '../../infrastructure/services/generated-image.service';
 import { UserService } from 'src/infrastructure/services/user.service';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @Controller('user')
 @UseGuards(JwtAuthGuard)
@@ -40,12 +43,16 @@ export class UserController {
   }
 
   @Get('images')
-  async getUserImages(@Req() req: RequestWithUser) {
+  async getUserImages(
+    @Req() req: RequestWithUser,
+    @Query(new ValidationPipe({ transform: true }))
+    paginationDto: PaginationDto,
+  ) {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException('Usuario no autenticado');
     }
-    return this.imageService.getImagesByUserId(userId);
+    return this.imageService.getImagesByUserId(userId, paginationDto);
   }
 
   @Patch('admin/set-credits')

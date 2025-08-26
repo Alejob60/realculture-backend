@@ -1,50 +1,70 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ContentRepository } from '../database/content.repository';
 import { Content } from '../../domain/entities/content.entity';
 import { UserRepository } from '../database/user.repository';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @Injectable()
 export class ContentService {
+  private readonly logger = new Logger(ContentService.name);
+
   constructor(
     private readonly contentRepository: ContentRepository,
     private readonly userRepository: UserRepository,
   ) {}
 
   async create(contentData: Partial<Content>): Promise<Content> {
+    this.logger.log(`Creating content for user: ${contentData.creatorId}`);
     return this.contentRepository.create(contentData);
   }
 
-  async findAll(): Promise<Content[]> {
-    return this.contentRepository.findAll();
+  async findAll(paginationDto: PaginationDto) {
+    this.logger.log('Finding all content with pagination');
+    const { page = 1, limit = 10 } = paginationDto;
+    const { data, total } = await this.contentRepository.findAll(page, limit);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: string): Promise<Content> {
+    this.logger.log(`Finding content with id: ${id}`);
     const content = await this.contentRepository.findOne(id);
-    if (!content)
+    if (!content) {
+      this.logger.warn(`Content with id ${id} not found`);
       throw new NotFoundException(`Contenido con ID ${id} no encontrado`);
+    }
     return content;
   }
 
   async update(id: string, updateData: Partial<Content>): Promise<Content> {
+    this.logger.log(`Updating content with id: ${id}`);
     const existing = await this.findOne(id);
-    return this.contentRepository.update(existing.userId, updateData);
+    return this.contentRepository.update(existing.id, updateData);
   }
 
   async remove(id: string): Promise<void> {
+    this.logger.log(`Removing content with id: ${id}`);
     const existing = await this.findOne(id);
-    await this.contentRepository.delete(existing.userId);
+    await this.contentRepository.delete(existing.id);
   }
 
-  // Guarda un audio generado en la galería del usuario
   async saveAudioToGallery(params: {
     userId: string;
     script: string;
     mediaUrl: string;
   }): Promise<Content> {
+    this.logger.log(`Saving audio to gallery for user: ${params.userId}`);
     const { userId, script, mediaUrl } = params;
     const user = await this.userRepository.findById(userId);
 
     if (!user) {
+      this.logger.warn(`User not found for saving audio: ${userId}`);
       throw new NotFoundException('Usuario no encontrado para guardar audio');
     }
 
@@ -57,7 +77,6 @@ export class ContentService {
     });
   }
 
-  // Guarda cualquier contenido generado con tipo seguro
   async save(data: {
     userId: string;
     type: 'image' | 'audio' | 'video' | 'text' | 'other';
@@ -67,12 +86,12 @@ export class ContentService {
     status: string;
     createdAt: Date;
   }): Promise<void> {
+    this.logger.log(`Saving content of type ${data.type} for user: ${data.userId}`);
     const user = await this.userRepository.findById(data.userId);
 
     if (!user) {
-      throw new NotFoundException(
-        'Usuario no encontrado para guardar contenido',
-      );
+      this.logger.warn(`User not found for saving content: ${data.userId}`);
+      throw new NotFoundException('Usuario no encontrado para guardar contenido');
     }
 
     const content: Partial<Content> = {

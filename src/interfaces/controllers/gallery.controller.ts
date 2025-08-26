@@ -1,49 +1,28 @@
 import {
   Controller,
   Get,
-  Post,
-  Req,
+  Query,
   UseGuards,
-  Body,
-  BadRequestException,
+  Req,
+  ForbiddenException,
 } from '@nestjs/common';
-import { Request } from 'express';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { GeneratedImageService } from '../../infrastructure/services/generated-image.service';
+import { GalleryService } from '../../infrastructure/services/gallery.service';
+import { JwtAuthGuard } from '../../interfaces/guards/jwt-auth.guard';
+import { GalleryQueryDto } from '../dto/gallery-query.dto';
+import { UserRole } from 'src/domain/enums/user-role.enum';
+import { RequestWithUser } from 'src/types/request-with-user';
 
-@UseGuards(JwtAuthGuard)
 @Controller('gallery')
+@UseGuards(JwtAuthGuard)
 export class GalleryController {
-  constructor(private readonly generatedImageService: GeneratedImageService) {}
+  constructor(private readonly galleryService: GalleryService) {}
 
-  @Post('save-image')
-  async saveImage(
-    @Req() req: Request,
-    @Body() body: { prompt: string; imageUrl: string },
-  ) {
-    const userId = req.user?.['userId'];
-    if (!userId) {
-      throw new BadRequestException('No se pudo obtener el userId del token');
+  @Get()
+  async getGallery(@Req() req: RequestWithUser, @Query() query: GalleryQueryDto) {
+    const user = req.user;
+    if (user.role !== UserRole.CREATOR && user.role !== UserRole.PRO) {
+      throw new ForbiddenException('You do not have permission to access the gallery.');
     }
-
-    const filename = `image_${Date.now()}.jpg`; // 🛡️ genera nombre único
-
-    return this.generatedImageService.saveImage(
-      userId,
-      body.prompt,
-      body.imageUrl,
-      filename,
-      'FREE',
-    );
-  }
-
-  @Get('my-images')
-  async getUserImages(@Req() req: Request) {
-    const userId = req.user?.['userId'];
-    if (!userId) {
-      throw new BadRequestException('No se pudo obtener el userId del token');
-    }
-
-    return this.generatedImageService.getImagesByUserId(userId);
+    return this.galleryService.getUserGallery(user.id);
   }
 }

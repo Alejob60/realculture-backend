@@ -1,0 +1,4 @@
+{
+    "appService.defaultWebAppToDeploy": "/subscriptions/a466ea69-1312-4361-95e1-f1c8524bea91/resourceGroups/realculture-rg/providers/Microsoft.Web/sites/realculture-backend",
+    "appService.deploySubpath": "."
+}

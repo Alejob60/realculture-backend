@@ -8,6 +8,7 @@ import { PassportModule } from '@nestjs/passport';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { UserModule } from './infrastructure/modules/user.module';
 import { LoginUseCase } from './application/use-cases/login.use-case';
+import { JwtRefreshStrategy } from './infrastructure/strategies/jwt-refresh.strategy';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { LoginUseCase } from './application/use-cases/login.use-case';
     forwardRef(() => UserModule),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, LoginUseCase],
+  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, LoginUseCase],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

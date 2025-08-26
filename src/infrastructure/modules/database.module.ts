@@ -9,10 +9,7 @@ import { GeneratedAudioEntity } from '../../domain/entities/generated-audio.enti
 import { GeneratedVideoEntity } from '../../domain/entities/generated-video.entity';
 import { GeneratedMusicEntity } from '../../domain/entities/generated-music.entity';
 import { Product } from '../../domain/entities/product.entity';
-import { Creator } from 'src/domain/entities/creator.entity';
-
-// Agrega aquí otras entidades según las uses en repositorios
-// import { OtraEntidad } from '../../domain/entities/otra-entidad.entity';
+import { Creator } from '../../domain/entities/creator.entity';
 
 @Module({
   imports: [
@@ -20,31 +17,13 @@ import { Creator } from 'src/domain/entities/creator.entity';
       UserEntity,
       Content,
       GeneratedImageEntity,
-      Content,
-      Creator,
-      GeneratedImageEntity,
       GeneratedAudioEntity,
       GeneratedVideoEntity,
       GeneratedMusicEntity,
       Product,
-       
-        
-
-      
+      Creator,
     ]),
   ],
-  exports: [
-    TypeOrmModule,
-    UserEntity,
-      Content,
-      GeneratedImageEntity,
-      Content,
-      Creator,
-      GeneratedImageEntity,
-      GeneratedAudioEntity,
-      GeneratedVideoEntity,
-      GeneratedMusicEntity,
-      Product, // Exportamos para que los repositorios puedan usar el InjectRepository
-  ],
+  exports: [TypeOrmModule], // 👈 suficiente
 })
 export class DatabaseModule {}

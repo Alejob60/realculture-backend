@@ -7,14 +7,14 @@ import {
 } from 'typeorm';
 import { Content } from './content.entity';
 import { GeneratedImageEntity } from './generated-image.entity';
-import { UserRole } from '../enums/user-role.enum';
 import { GeneratedVideoEntity } from './generated-video.entity';
 import { GeneratedAudioEntity } from './generated-audio.entity';
 import { GeneratedMusicEntity } from './generated-music.entity';
+import { UserRole } from '../enums/user-role.enum';
 
 @Entity('users')
 export class UserEntity {
-  @PrimaryGeneratedColumn('uuid', { name: 'user_id' })
+  @PrimaryGeneratedColumn('uuid', { name: 'userId' })
   userId: string;
 
   @Column({ name: 'email' })
@@ -35,11 +35,23 @@ export class UserEntity {
   @Column({ name: 'plan', default: 'FREE' })
   plan: string;
 
-  @Column({ name: 'avatar', nullable: true })
+  @Column({ name: 'picture', nullable: true })
   picture?: string;
 
   @Column({ name: 'credits', type: 'int', default: 25 })
   credits: number;
+
+  @Column({ name: 'hashed_refresh_token', nullable: true })
+  hashedRefreshToken?: string;
+
+  @Column({ name: 'resetToken', nullable: true })
+  resetToken?: string;
+
+  @Column({ name: 'resetTokenExpires', type: 'timestamp', nullable: true })
+  resetTokenExpires?: Date;
+
+  @Column({ name: 'isResetting', type: 'boolean', default: false })
+  isResetting: boolean;
 
   @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;

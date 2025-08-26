@@ -1,73 +1,48 @@
-// src/api/controllers/video.controller.ts
-
 import {
   Controller,
   Post,
   Body,
-  Req,
   UseGuards,
+  Req,
   HttpException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { Request } from 'express';
+import { AuthGuard } from '@nestjs/passport';
 import { VideoService } from '../../infrastructure/services/video.service';
+import { GenerateVideoDto } from '../dto/video-generation.dto';
 
-@Controller('api/v1/video')
+@Controller('video')
 export class VideoController {
   private readonly logger = new Logger(VideoController.name);
 
   constructor(private readonly videoService: VideoService) {}
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AuthGuard('jwt'))
   @Post('generate')
-  async generateVideo(@Body() body: any, @Req() req: Request) {
+  async generateVideo(@Body() dto: GenerateVideoDto, @Req() req: any) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        this.logger.warn('Usuario no autenticado o token inválido');
-        throw new HttpException('No autorizado', HttpStatus.UNAUTHORIZED);
-      }
+      const userId = req.user?.id || 'admin';
 
-      const {
-        prompt,
-        n_seconds,
-        useVoice = true,
-        useSubtitles = true,
-        useMusic = true,
-        useSora = true,
-      } = body;
+      this.logger.log(
+        `🎬 Generating video for user ${userId} with prompt: ${dto.prompt}`,
+      );
 
-      // Validaciones básicas
-      if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
-        throw new HttpException('Prompt inválido o vacío', HttpStatus.BAD_REQUEST);
-      }
-
-      if (!n_seconds || typeof n_seconds !== 'number' || n_seconds <= 0) {
-        throw new HttpException('Duración inválida', HttpStatus.BAD_REQUEST);
-      }
-
-      // Ejecutar generación de video (logica dentro del servicio)
-      const videoResult = await this.videoService.generateFullVideo({
-        userId,
-        prompt,
-        n_seconds,
-        useVoice,
-        useSubtitles,
-        useMusic,
-        useSora,
-      });
+      // Pasamos dto + userId al servicio
+      const result = await this.videoService.generateVideo(dto, userId);
 
       return {
-        success: true,
-        data: videoResult,
+        message: '✅ Video generado con éxito',
+        data: result,
       };
-    } catch (error: any) {
-      this.logger.error('Error en generateVideo:', error?.message || error);
+    } catch (error) {
+      this.logger.error(
+        `❌ Error generating video: ${error.message}`,
+        error.stack,
+      );
       throw new HttpException(
-        error.message || 'Error interno al generar video',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        `Error al generar el video: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

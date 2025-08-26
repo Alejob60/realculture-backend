@@ -19,13 +19,7 @@
     "noFallthroughCasesInSwitch": false,
     "strict": false,
     "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ],
-    "types": [
-      "node",
-      "express",
-      "multer"
+      "./node_modules/@types"
     ]
   },
   "include": ["src/**/*.ts"],

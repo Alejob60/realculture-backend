@@ -11,5 +11,6 @@ import { HttpModule } from '@nestjs/axios';
   imports: [HttpModule],
   controllers: [AiController, RagController],
   providers: [AiService, RagService, GenerateRagResponseUseCase],
+  exports: [AiService],
 })
 export class AiModule {}

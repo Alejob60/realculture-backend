@@ -1,5 +1,10 @@
-// src/infrastructure/services/media-bridge.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  HttpException,
+  HttpStatus,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import axios from 'axios';
 import { firstValueFrom } from 'rxjs';
@@ -35,11 +40,16 @@ export class MediaBridgeService {
         config,
       );
       return response.data;
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message || error.message || 'Error desconocido';
-      this.logger.error(`❌ Error al generar imagen (bridge): ${message}`);
-      throw error;
+    } catch (error: unknown) {
+      // --- MANEJO DE ERRORES MEJORADO ---
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const errorData = JSON.stringify(error.response?.data);
+        this.logger.error(`❌ Error al generar imagen (bridge): Status ${status} - Data: ${errorData}`);
+        throw new HttpException(error.response?.data, status || HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+      this.logger.error(`❌ Error al generar imagen (bridge): Error no relacionado con Axios.`, error);
+      throw new InternalServerErrorException('Error inesperado en el servicio de media.');
     }
   }
 
@@ -158,7 +168,7 @@ export class MediaBridgeService {
   async forward(endpoint: string, req: Request, payload: any): Promise<any> {
     const url = `${this.VIDEO_SERVICE_URL}/${endpoint}`;
     const headers = {
-      Authorization: req.headers['authorization'] || '',
+      Authorization: req.headers.authorization || '',
       'Content-Type': 'application/json',
     };
 
@@ -169,13 +179,11 @@ export class MediaBridgeService {
 
       const data = response.data;
 
-      // ✅ Aceptar directamente respuestas tipo { script, audioUrl, duration }
       if (!data || (!data.script && !data.result)) {
         this.logger.error(`❌ Respuesta inesperada: ${JSON.stringify(data)}`);
         throw new Error('Respuesta inesperada del servicio.');
       }
 
-      // Si viene en result, devolver result; si viene directo, devolver data
       return data.result ?? data;
     } catch (error) {
       this.logger.error(`❌ Error reenviando a ${url}`, error);

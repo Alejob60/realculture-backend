@@ -4,7 +4,11 @@ import { DataSource } from 'typeorm';
 @Controller('health')
 export class HealthController {
   constructor(private readonly dataSource: DataSource) {}
-
+  @Get('ping')
+  ping() {
+    return { status: 'ok' };
+  }
+  
   @Get('db')
   async checkDatabase() {
     try {
