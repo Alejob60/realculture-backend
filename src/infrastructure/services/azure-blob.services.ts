@@ -84,7 +84,21 @@ export class AzureBlobService {
     this.logger.log(`🔐 URL firmada generada: ${signedUrl}`);
     return signedUrl;
   }
-
+  public getContainerClient(containerName?: string) {
+    return this.blobServiceClient.getContainerClient(containerName || this.containerName);
+  }
+  
+  async checkIfBlobExists(blobName: string, container?: string): Promise<boolean> {
+    try {
+      const client = this.getContainerClient(container);
+      const blobClient = client.getBlobClient(blobName);
+      const exists = await blobClient.exists();
+      return exists;
+    } catch (error) {
+      this.logger.error(`❌ Error verificando existencia de blob ${blobName}`, error);
+      return false;
+    }
+  }
   /**
    * Sube un buffer a un contenedor y blob específicos.
    */
@@ -96,16 +110,14 @@ export class AzureBlobService {
   ): Promise<string> {
     const containerClient =
       this.blobServiceClient.getContainerClient(containerName);
-    await containerClient.createIfNotExists(); // O 'private'
+    await containerClient.createIfNotExists();
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
     await blockBlobClient.upload(buffer, buffer.length, {
       blobHTTPHeaders: { blobContentType: contentType },
     });
 
-    this.logger.log(
-      `📤 Buffer subido a ${containerName}/${blobName}`,
-    );
+    this.logger.log(`📤 Buffer subido a ${containerName}/${blobName}`);
     return blockBlobClient.url;
   }
 
@@ -127,7 +139,7 @@ export class AzureBlobService {
       {
         containerName: containerName,
         blobName: blobName,
-        permissions: BlobSASPermissions.parse('r'), // 'r' for read
+        permissions: BlobSASPermissions.parse('r'),
         expiresOn,
         protocol: SASProtocol.Https,
       },
@@ -157,9 +169,29 @@ export class AzureBlobService {
     }
   }
 
+  /**
+   * Verifica si un blob existe en un contenedor específico
+   */
   async blobExists(containerName: string, blobName: string): Promise<boolean> {
-    const containerClient = this.blobServiceClient.getContainerClient(containerName);
-    const blobClient = containerClient.getBlobClient(blobName);
-    return await blobClient.exists();
+    try {
+      const containerClient = this.blobServiceClient.getContainerClient(containerName);
+      const blobClient = containerClient.getBlobClient(blobName);
+      return await blobClient.exists();
+    } catch (error) {
+      this.logger.error(`❌ Error verificando existencia de blob ${containerName}/${blobName}`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Sube un texto (ej: SRT) a un blob
+   */
+  async uploadText(blobName: string, content: string, containerName?: string): Promise<void> {
+    const containerClient = this.blobServiceClient.getContainerClient(containerName || this.containerName);
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    await blockBlobClient.upload(content, Buffer.byteLength(content), {
+      blobHTTPHeaders: { blobContentType: 'text/plain' },
+    });
+    this.logger.log(`📤 Texto subido a ${containerName || this.containerName}/${blobName}`);
   }
 }

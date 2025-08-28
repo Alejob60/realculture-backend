@@ -41,32 +41,107 @@ export class MediaBridgeService {
       );
       return response.data;
     } catch (error: unknown) {
-      // --- MANEJO DE ERRORES MEJORADO ---
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         const errorData = JSON.stringify(error.response?.data);
-        this.logger.error(`❌ Error al generar imagen (bridge): Status ${status} - Data: ${errorData}`);
-        throw new HttpException(error.response?.data, status || HttpStatus.INTERNAL_SERVER_ERROR);
+        this.logger.error(
+          `❌ Error al generar imagen (bridge): Status ${status} - Data: ${errorData}`,
+        );
+        throw new HttpException(
+          error.response?.data,
+          status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
-      this.logger.error(`❌ Error al generar imagen (bridge): Error no relacionado con Axios.`, error);
-      throw new InternalServerErrorException('Error inesperado en el servicio de media.');
+      this.logger.error(
+        `❌ Error al generar imagen (bridge): Error no relacionado con Axios.`,
+        error,
+      );
+      throw new InternalServerErrorException(
+        'Error inesperado en el servicio de media.',
+      );
     }
   }
 
-  async generateVideo(data: any, token?: string) {
+  async generateVideo(data: {
+    prompt: string;
+    plan?: string;
+    useVoice?: boolean;
+    useSubtitles?: boolean;
+    useMusic?: boolean;
+    useSora?: boolean;
+  }, token?: string): Promise<any> {
     try {
+      // Normalización del plan
+      const validPlans = ['free', 'creator', 'pro'];
+      const plan =
+        data.plan && validPlans.includes(data.plan.toLowerCase())
+          ? data.plan.toLowerCase()
+          : 'free';
+
+      const payload = {
+        prompt: data.prompt,
+        plan,
+        useVoice: !!data.useVoice,
+        useSubtitles: !!data.useSubtitles,
+        useMusic: !!data.useMusic,
+        useSora: !!data.useSora,
+      };
+
+      const config = {
+        headers: { 'Content-Type': 'application/json' } as any,
+      };
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      this.logger.log('Enviando solicitud a video-generator...');
       const response = await axios.post(
         `${this.generatorUrl}/videos/generate`,
-        data,
-        this.buildHeaders(token),
+        payload,
+        { ...config, timeout: 240000 }, // 4 minutos de espera
       );
-      return response.data;
-    } catch (error) {
-      this.logger.error('❌ Error al generar video:', error.message);
-      throw error;
+
+      if (!response.data || !response.data.result) {
+        this.logger.error('Respuesta inválida del microservicio de video');
+        throw new HttpException(
+          'Respuesta inválida del microservicio de video',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      const result = response.data.result;
+
+      // Normalización mínima de retorno para el controller
+      return {
+        result: {
+          videoFile: result.videoUrl || null,
+          audioFile: result.audioUrl || null,
+          script: result.script || '',
+          prompt: data.prompt,
+        },
+      };
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const errorData = JSON.stringify(error.response?.data);
+        this.logger.error(
+          `❌ Error al generar video (bridge): Status ${status} - Data: ${errorData}`,
+        );
+        throw new HttpException(
+          error.response?.data,
+          status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      this.logger.error(
+        '❌ Error al generar video (bridge): Error no relacionado con Axios.',
+        error,
+      );
+      throw new InternalServerErrorException(
+        'Error inesperado en el servicio de video.',
+      );
     }
   }
-
   async generateVoice(data: any, token?: string) {
     try {
       const response = await axios.post(

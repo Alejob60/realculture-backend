@@ -8,6 +8,9 @@ import { ConfigModule } from '@nestjs/config';
 import { GeneratedVideoEntity } from 'src/domain/entities/generated-video.entity';
 import { AiModule } from './ai.module';
 import { AzureBlobModule } from './azure-blob.module';
+import { MediaModule } from './media.module';
+import { UserService } from '../services/user.service';
+import { AzureBlobService } from '../services/azure-blob.services';
 
 @Module({
   imports: [
@@ -17,9 +20,10 @@ import { AzureBlobModule } from './azure-blob.module';
     ConfigModule,
     AiModule, // Re-añadir AiModule
     AzureBlobModule,
+    MediaModule,
   ],
   controllers: [VideoController],
-  providers: [VideoService],
+  providers: [VideoService, UserService, AzureBlobService],
 })
 export class VideoModule {}
 

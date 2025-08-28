@@ -1,20 +1,22 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UserEntity } from '../../domain/entities/user.entity';
 import { UserController } from '../../interfaces/controllers/user.controller';
 import { UserService } from '../services/user.service';
+import { UserRepository } from '../database/user.repository';
 import { LoginUseCase } from '../../application/use-cases/login.use-case';
 import { AuthModule } from '../../auth.module';
 import { UseServiceUseCase } from 'src/application/use-cases/use-service.use-case';
-import { DatabaseModule } from '../database/database.module';
-import { MediaModule } from './media.module';  // <-- Importa MediaModule
+import { MediaModule } from './media.module';
 
 @Module({
   imports: [
-    DatabaseModule, 
+    TypeOrmModule.forFeature([UserEntity]),
     forwardRef(() => AuthModule),
-    forwardRef(() => MediaModule), // <-- Agrega MediaModule aquí con forwardRef
+    MediaModule,
   ],
   controllers: [UserController],
-  providers: [UserService, LoginUseCase, UseServiceUseCase],
-  exports: [UserService, UseServiceUseCase],
+  providers: [UserService, UserRepository, LoginUseCase, UseServiceUseCase],
+  exports: [UserService, UserRepository, UseServiceUseCase],
 })
 export class UserModule {}

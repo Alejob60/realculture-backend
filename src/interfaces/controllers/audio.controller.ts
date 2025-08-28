@@ -22,7 +22,7 @@ const AUDIO_DURATION_CREDIT_COST: Record<number, number> = {
   60: 25,
 };
 
-@Controller('/api/audio')
+@Controller('/audio')
 export class AudioController {
   constructor(
     private readonly userService: UserService,
