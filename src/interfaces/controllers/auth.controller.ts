@@ -19,8 +19,8 @@ import { RegisterRequestDto } from '../dto/register-request.dto';
 import { AuthResponseDto } from '../dto/auth-response.dto';
 import { LoginRequestDto } from '../dto/login-request.dto';
 import { JwtAuthGuard } from '../../interfaces/guards/jwt-auth.guard';
-import { UserService } from 'src/infrastructure/services/user.service';
-import { LoginUseCase } from 'src/application/use-cases/login.use-case';
+import { UserService } from '../../infrastructure/services/user.service';
+import { LoginUseCase } from '../../application/use-cases/login.use-case';
 import { JwtRefreshGuard } from '../guards/jwt-refresh.guard';
 
 @ApiTags('auth')
@@ -74,8 +74,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Log out a user' })
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'The user has been successfully logged out.' })
-  async logout(@Req() req: { user: { userId: string } }) {
-    await this.authService.logout(req.user.userId);
+  async logout(@Req() req: { user: { id: string } }) {
+    await this.authService.logout(req.user.id);
     return {
       statusCode: HttpStatus.OK,
       message: 'Logout successful',
@@ -99,8 +99,8 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'The user profile.' })
   @ApiResponse({ status: 404, description: 'User not found.' })
-  async getProfile(@Req() req: { user: { userId: string } }) {
-    const user = await this.userService.findById(req.user.userId);
+  async getProfile(@Req() req: { user: { id: string } }) {
+    const user = await this.userService.findById(req.user.id);
     if (!user) {
       throw new HttpException('Usuario no encontrado', 404);
     }

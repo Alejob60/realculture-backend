@@ -68,6 +68,7 @@ describe('AuthService', () => {
         generatedAudios: [],
         generatedMusic: [],
         plan: 'FREE',
+        isResetting: false,
       };
 
       const loginDto = { email: 'test@example.com', password: 'password' };
@@ -98,6 +99,7 @@ describe('AuthService', () => {
         generatedAudios: [],
         generatedMusic: [],
         plan: 'FREE',
+        isResetting: false,
       };
 
       const loginDto = { email: 'test@example.com', password: 'wrongpassword' };

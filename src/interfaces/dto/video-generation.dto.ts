@@ -1,9 +1,13 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsObject, IsNumber } from 'class-validator';
 
 export class GenerateVideoDto {
   @IsString()
   @IsNotEmpty()
   prompt: string;
+
+  @IsObject()
+  @IsOptional()
+  jsonPrompt?: any;
 
   @IsString()
   @IsOptional()
@@ -24,6 +28,10 @@ export class GenerateVideoDto {
   @IsBoolean()
   @IsOptional()
   useSora?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  n_seconds?: number;
 
   constructor(partial?: Partial<GenerateVideoDto>) {
     Object.assign(this, partial);

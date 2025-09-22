@@ -13,8 +13,8 @@ import * as path from 'path';
 export class AzureBlobService {
   private readonly logger = new Logger(AzureBlobService.name);
   private readonly containerName =
-    process.env.AZURE_STORAGE_CONTAINER_IMAGES || 'images';
-  private readonly account = process.env.AZURE_STORAGE_ACCOUNT_NAME!;
+    process.env.AZURE_STORAGE_CONTAINER_IMAGES || process.env.AZURE_BLOB_CONTAINER || 'images';
+  private readonly account = process.env.AZURE_STORAGE_ACCOUNT!;
   private readonly accountKey = process.env.AZURE_STORAGE_KEY!;
   private readonly sharedKeyCredential: StorageSharedKeyCredential;
   private readonly blobServiceClient: BlobServiceClient;

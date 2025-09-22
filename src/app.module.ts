@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth.module';
 import { ContentModule } from './infrastructure/modules/content.module';
 import { HealthController } from './interfaces/controllers/health.controller';
@@ -13,7 +14,10 @@ import { InfluencerModule } from './infrastructure/modules/influencer.module';
 import { MediaModule } from './infrastructure/modules/media.module';
 import { AudioModule } from './infrastructure/modules/audio.module';
 import { VideoModule } from './infrastructure/modules/video.module';
-
+import { PromptJsonService } from './infrastructure/services/prompt-json.service';
+import { PromptJsonController } from './interfaces/controllers/prompt-json.controller';
+import { GalleryModule } from './infrastructure/modules/gallery.module';
+import { DataCleanupModule } from './infrastructure/modules/data-cleanup.module';
 // Import all entities
 import { UserEntity } from './domain/entities/user.entity';
 import { Content } from './domain/entities/content.entity';
@@ -28,6 +32,7 @@ import { Creator } from './domain/entities/creator.entity';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -77,9 +82,11 @@ import { Creator } from './domain/entities/creator.entity';
     MediaModule,
     AudioModule,
     VideoModule, // Añadir el módulo de Video
+    GalleryModule,
+    DataCleanupModule,
   ],
-  controllers: [HealthController],
-  providers: [],
+  controllers: [HealthController, PromptJsonController],
+  providers: [PromptJsonService],
   exports: [],
 })
 export class AppModule {}

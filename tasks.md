@@ -1,65 +1,31 @@
-# 📌 Scrum Diario - Alejandro
+# Tasks: Estado y Pendientes del Backend
 
-## 🗓️ Semana: [20 - 25 agosto 2025]
-Meta: Tener **Colombiatic** con productos listos para compra y **Misybot** con backend funcional de login/registro restaurado.
+## Lo que está listo
+- Arquitectura modular NestJS funcional
+- Repositorios y servicios para usuarios, contenidos, influencers y galería
+- Integración y gestión de Azure Blob (upload, delete, signed URLs)
+- Generación de media por IA y microservicio externo (audio, imagen, video)
+- CRUD de contenidos y usuarios
+- Gestión y decremento de créditos de usuario
+- Upgrade de planes de usuario (básico, creator, PRO)
+- Validación de subtítulos SRT y utilitarios core para assets
+- Logging extendido en media/video
+- Utilitario waitForBlobAvailable (para flujo de video recomendable)
 
+## Lo que falta / en progreso
+- [ ] Restaurar 100% login/registro (verificar logs, flows y conectar front-back)
+- [ ] Validar reglas CORS/VNET y conectividad entre componentes
+- [ ] Integrar y robustecer fallback de MediaBridgeService para video
+- [ ] Validar con logging el JSON final de respuesta en VideoService
+- [ ] Pruebas end-to-end de todos los métodos de autenticación
+- [ ] Pendiente documentación de endpoints y flujos para referencia rápida
+- [ ] Refactor de algunos controladores para mejor reporting/fallo
+- [ ] Confirmar reglas de VNET Azure en despliegue
+- [ ] Revisar/expandir hooks de validación en controladores multimedia
+
+## Referencia de contexto
+- Consultar archivo CONTEXT-BACKEND.md para arquitectura y lógica central
+- video-task.md para tareas y contexto específico de VideoService/media
 ---
+*Actualiza este archivo solo con avances significativos, bloqueos o tareas nuevas. Marca con [x] lo que esté completado y mantén prioridades visibles.*
 
-## 🚀 Proyectos Activos
-
-
-
----
-
-### 2. Misybot
-**Objetivo:** Restaurar backend y lograr login/registro operativo.
-
-#### Día 1 (Restauración urgente)
-- [ ] Revisar configuración **CORS + VNET** (2h)  
-- [ ] Probar conectividad front-back con endpoint de prueba (1h)  
-- [ ] Revisar **Auth service** (login y registro) y logs (2h)  
-- [ ] Restaurar base de datos si es necesario (1h)  
-- [ ] Prueba end-to-end de login y registro (2h)
-
-⏳ Estimado total: **8h**
-
----
-
-## 📅 Plan Diario
-
-### 📍 Hoy (Miércoles 20/08)
-- 2h MongoDB productos (Colombiatic)  
-- 6h Restauración backend (Misybot)  
-
-### 📍 Jueves 21/08
-- 4h Frontend Colombiatic (selector dinámico)  
-- 4h Backend ajustes login/registro (Misybot)  
-
-### 📍 Viernes 22/08
-- 4h Flujo completo de compra en Colombiatic  
-- 4h Pruebas integrales login/registro Misybot  
-
-### 📍 Lunes 25/08 (Entrega Final)
-✅ Ambos proyectos funcionando con lo básico operativo.
-
----
-
-## 📓 Diario de Avances
-*(Aquí anotas lo que lograste cada día)*  
-
-- **Miércoles 20/08:**  
-  - [ ]  
-
-- **Jueves 21/08:**  
-  - [ ]  
-
-- **Viernes 22/08:**  
-  - [ ]  
-
----
-
-## 🚧 Bloqueos / Pendientes
-- [ ] Confirmar reglas exactas de VNET en Azure (Misybot).  
-- [ ] Verificar conexión estable entre backend y frontend en despliegue.  
-
----

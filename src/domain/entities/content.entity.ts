@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
@@ -11,36 +12,59 @@ import { UserEntity } from './user.entity';
 @Entity('contents')
 export class Content {
   @PrimaryGeneratedColumn('uuid')
-  id: string; // ✅ Cambié userId por id (porque esto es el ID del contenido, no del usuario)
+  id: string;
 
-  @Column()
-  title: string;
+  @Column({ nullable: true })
+  type: string;
 
-  @Column({ type: 'text' })
-  description: string;
+  @Column({ type: 'text', nullable: true })
+  prompt: string;
 
   @Column({ nullable: true, name: 'media_url' })
-  mediaUrl?: string; // URL pública del archivo (opcional)
+  mediaUrl: string;
 
-  @Column({ nullable: true, name: 'blob_path' })
-  blobPath?: string; // ✅ Ruta interna en Azure Blob Storage (p.ej., "user-123/video1.mp4")
-
-  @Column({ type: 'int', nullable: true })
-  duration?: number; // En segundos (para audio/video)
-
-  @Column({ default: 'other' })
-  type: 'image' | 'audio' | 'video' | 'text' | 'other';
+  @Column({ default: 'success' })
+  status: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
+  @Column({ type: 'timestamp', nullable: true, name: 'expires_at' })
+  expiresAt: Date;
+
+  @Column({ nullable: true })
+  filename: string;
+
+  @Column({ type: 'float', nullable: true })
+  duration: number;
+
+  @Column({ nullable: true })
+  title: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: any;
+
+  @Column({ nullable: true, name: 'audio_url' })
+  audioUrl: string;
+
+  @Column({ type: 'float', nullable: true, name: 'audio_duration' })
+  audioDuration: number;
+
+  @Column({ nullable: true, name: 'audio_voice' })
+  audioVoice: string;
+
   @ManyToOne(() => UserEntity, (user) => user.contents, { nullable: true, eager: true })
-  @JoinColumn({ name: 'creator_id' })
-  creator?: UserEntity;
+  @JoinColumn({ name: 'creatorUserId', referencedColumnName: 'userId' })
+  creator: UserEntity;
 
-  @Column({ nullable: true, name: 'creator_id' })
-  creatorId?: string;
+  // Add userId property to access the foreign key value directly
+  @Column({ nullable: true, name: 'creatorUserId' })
+  userId: string;
 
-  @Column({ default: 'completed' })
-  status: string;
+  // Make updated_at column optional since it doesn't exist in the database
+  @UpdateDateColumn({ name: 'updated_at', nullable: true })
+  updatedAt: Date;
 }

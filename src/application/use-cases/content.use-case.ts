@@ -30,6 +30,33 @@ export class ContentUseCase {
     await this.findOne(id);
     return this.contentRepository.delete(id);
   }
+  
+  /**
+   * Extracts the blob path from an Azure Blob URL
+   * @param url The full Azure Blob URL
+   * @returns The blob path or null if not a valid Azure Blob URL
+   */
+  private extractBlobPathFromUrl(url: string): string | null {
+    if (!url) return null;
+    
+    try {
+      const urlObj = new URL(url);
+      // Azure Blob URLs have the format: https://account.blob.core.windows.net/container/blob-path
+      // We want to extract the blob-path part
+      const pathParts = urlObj.pathname.split('/').filter(part => part.length > 0);
+      
+      // The blob path is everything after the container name (second part)
+      if (pathParts.length >= 2) {
+        // Remove the first two parts (empty string and container name) and join the rest
+        return pathParts.slice(1).join('/');
+      }
+      
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   async registerGeneratedContent(data: {
     userId: string;
     type: string;
@@ -39,11 +66,15 @@ export class ContentUseCase {
     status: string;
     createdAt: Date;
   }): Promise<Content> {
+    // Extract blob path from the media URL
+    const blobPath = this.extractBlobPathFromUrl(data.url);
+    
     const content: Partial<Content> = {
-      creatorId: data.userId,  // CORRECCIÓN: usa creatorId, no userId
+      userId: data.userId,  // Use userId instead of creatorId
       type: data.type as 'image' | 'audio' | 'video' | 'text' | 'other',
       description: data.prompt,
       mediaUrl: data.url,
+      filename: blobPath || undefined, // Use filename instead of blobPath
       duration: data.duration,
       status: data.status,
       createdAt: data.createdAt,

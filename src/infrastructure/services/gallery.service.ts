@@ -1,133 +1,404 @@
 import {
   Injectable,
-  InternalServerErrorException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
-import { Content } from 'src/domain/entities/content.entity';
-import {
-  BlobSASPermissions,
-  generateBlobSASQueryParameters,
-  StorageSharedKeyCredential,
-} from '@azure/storage-blob';
-import { ConfigService } from '@nestjs/config';
+  import { InjectRepository } from '@nestjs/typeorm';
+  import { Repository, Between, MoreThan, IsNull } from 'typeorm';
+  import { Content } from '../../domain/entities/content.entity';
+  import { AzureBlobService } from './azure-blob.services';
+  import { GeneratedImageEntity } from '../../domain/entities/generated-image.entity';
+  import { GeneratedVideoEntity } from '../../domain/entities/generated-video.entity';
+  import { GeneratedAudioEntity } from '../../domain/entities/generated-audio.entity';
+  
+  @Injectable()
+  export class GalleryService {
+    private readonly logger = new Logger(GalleryService.name);
+  
+    constructor(
+      @InjectRepository(Content)
+      private readonly contentRepository: Repository<Content>,
+      @InjectRepository(GeneratedImageEntity)
+      private readonly generatedImageRepository: Repository<GeneratedImageEntity>,
+      @InjectRepository(GeneratedVideoEntity)
+      private readonly generatedVideoRepository: Repository<GeneratedVideoEntity>,
+      @InjectRepository(GeneratedAudioEntity)
+      private readonly generatedAudioRepository: Repository<GeneratedAudioEntity>,
+      private readonly azureBlobService: AzureBlobService,
+    ) {
+    }
+  
+    /**
+     * Obtiene la galería del usuario combinando datos de todas las tablas relevantes.
+     */
+    async getUserGallery(userId: string): Promise<
+      {
+        id: string;
+        title: string;
+        description: string;
+        type: string;
+        createdAt: Date;
+        sasUrl: string | null;
+        previewUrl: string | null;
+        duration?: number;
+        audioUrl?: string;
+        audioDuration?: number;
+        audioVoice?: string;
+      }[]
+    > {
+      // Validate userId
+      if (!userId) {
+        this.logger.error('User ID is undefined or null');
+        throw new BadRequestException('User ID is required');
+      }
+      
+      this.logger.log(`Consultando galería para el usuario: ${userId}`);
+  
+      // Get the first day of the current month
+      const dateFrom = new Date();
+      dateFrom.setDate(1);
+      dateFrom.setHours(0, 0, 0, 0);
+  
+      // Get the current date
+      const dateTo = new Date();
+      dateTo.setHours(23, 59, 59, 999);
+  
+      this.logger.log(`Fetching content from ${dateFrom.toISOString()} to ${dateTo.toISOString()}`);
+  
+      // For debugging purposes, let's also try fetching all content without date restrictions
+      // to see if there's any content at all
+      const allContents = await this.contentRepository
+      .createQueryBuilder('content')
+      .where('(content.userId = :userId OR content.creatorUserId = :userId)', { userId })
+      .andWhere('(content.expiresAt > :now OR content.expiresAt IS NULL)', { now: new Date() })
+      .orderBy('content.createdAt', 'DESC')
+      .getMany();
+    
+    this.logger.log(`Total content items without date filter: ${allContents.length}`);
+      
+      const allGeneratedImages = await this.generatedImageRepository.find({
+        where: [
+          {
+            user: { userId: userId },
+            // Only get non-expired content (expiresAt is null or in the future)
+            expiresAt: MoreThan(new Date()),
+          },
+          {
+            user: { userId: userId },
+            // Also get content with no expiration date
+            expiresAt: IsNull(),
+          }
+        ],
+        order: { createdAt: 'DESC' },
+        relations: ['user'],
+      });
+      
+      this.logger.log(`Total generated images without date filter: ${allGeneratedImages.length}`);
+      
+      const allGeneratedVideos = await this.generatedVideoRepository.find({
+        where: {
+          user: { userId: userId },
+          status: 'COMPLETED',
+        },
+        order: { createdAt: 'DESC' },
+        relations: ['user'],
+      });
+      
+      this.logger.log(`Total generated videos without date filter: ${allGeneratedVideos.length}`);
+      
+      const allGeneratedAudios = await this.generatedAudioRepository.find({
+        where: {
+          user: { userId: userId },
+        },
+        order: { createdAt: 'DESC' },
+        relations: ['user'],
+      });
+      
+      this.logger.log(`Total generated audios without date filter: ${allGeneratedAudios.length}`);
 
-@Injectable()
-export class GalleryService {
-  private readonly logger = new Logger(GalleryService.name);
-  private readonly accountName: string;
-  private readonly accountKey: string;
-  private readonly containerName: string;
+    // Get content from contents table
+    const contents = await this.contentRepository
+      .createQueryBuilder('content')
+      .where('(content.userId = :userId OR content.creatorUserId = :userId)', { userId })
+      .andWhere('content.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
+      .andWhere('(content.expiresAt > :now OR content.expiresAt IS NULL)', { now: new Date() })
+      .orderBy('content.createdAt', 'DESC')
+      .getMany();
 
-  constructor(
-    @InjectRepository(Content)
-    private readonly contentRepository: Repository<Content>,
-    private readonly configService: ConfigService,
-  ) {
-    this.accountName = this.getRequiredConfig('AZURE_STORAGE_ACCOUNT');
-    this.accountKey = this.getRequiredConfig('AZURE_STORAGE_KEY');
-    this.containerName = this.getRequiredConfig('AZURE_BLOB_CONTAINER');
-  }
+    // Also get content from the last 30 days regardless of month boundaries
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentContents = await this.contentRepository
+      .createQueryBuilder('content')
+      .where('(content.userId = :userId OR content.creatorUserId = :userId)', { userId })
+      .andWhere('content.createdAt > :thirtyDaysAgo', { thirtyDaysAgo })
+      .andWhere('(content.expiresAt > :now OR content.expiresAt IS NULL)', { now: new Date() })
+      .orderBy('content.createdAt', 'DESC')
+      .getMany();
 
-  /**
-   * Obtiene la galería del usuario dentro del periodo de suscripción (últimos 30 días).
-   */
-  async getUserGallery(userId: string): Promise<
-    {
-      id: string;
-      title: string;
-      description: string;
-      type: 'image' | 'audio' | 'video' | 'text' | 'other';
-      createdAt: Date;
-      sasUrl: string | null;
-      previewUrl: string | null;
-    }[]
-  > {
-    this.logger.log(`Consultando galería para el usuario: ${userId}`);
+    // Combine contents and recentContents, removing duplicates
+    const combinedContents = [...contents, ...recentContents].filter(
+      (content, index, self) => 
+        index === self.findIndex((c) => c.id === content.id)
+    );
 
-    const dateFrom = new Date();
-    dateFrom.setDate(dateFrom.getDate() - 30);
-
-    const contents = await this.contentRepository.find({
-      where: {
-        creatorId: userId,
-        createdAt: MoreThanOrEqual(dateFrom),
-      },
+    // Get content from generated_images table
+    const generatedImages = await this.generatedImageRepository.find({
+      where: [
+        {
+          user: { userId: userId },
+          createdAt: Between(dateFrom, dateTo),
+          // Only get non-expired content (expiresAt is null or in the future)
+          expiresAt: MoreThan(new Date()),
+        },
+        {
+          user: { userId: userId },
+          createdAt: Between(dateFrom, dateTo),
+          // Also get content with no expiration date
+          expiresAt: IsNull(),
+        },
+        {
+          user: { userId: userId },
+          // Also get content from the last 30 days regardless of month boundaries
+          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+          expiresAt: MoreThan(new Date()),
+        },
+        {
+          user: { userId: userId },
+          // Also get content from the last 30 days regardless of month boundaries
+          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+          expiresAt: IsNull(),
+        },
+        {
+          user: { userId: userId },
+          // Most permissive query - get all content for this user
+        }
+      ],
       order: { createdAt: 'DESC' },
+      relations: ['user'],
     });
 
-    const result: {
-      id: string;
-      title: string;
-      description: string;
-      type: 'image' | 'audio' | 'video' | 'text' | 'other';
-      createdAt: Date;
-      sasUrl: string | null;
-      previewUrl: string | null;
-    }[] = [];
+    // Get content from generated_videos table
+    const generatedVideos = await this.generatedVideoRepository.find({
+      where: [
+        {
+          user: { userId: userId },
+          createdAt: Between(dateFrom, dateTo),
+          status: 'COMPLETED',
+        },
+        {
+          user: { userId: userId },
+          // Also get content from the last 30 days regardless of month boundaries
+          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+          status: 'COMPLETED',
+        },
+        {
+          user: { userId: userId },
+          status: 'COMPLETED',
+        }
+      ],
+      order: { createdAt: 'DESC' },
+      relations: ['user'],
+    });
 
-    for (const item of contents) {
-      let sasUrl: string | null = null;
-      let previewUrl: string | null = null;
+    // Get content from generated_audios table
+    const generatedAudios = await this.generatedAudioRepository.find({
+      where: [
+        {
+          user: { userId: userId },
+          createdAt: Between(dateFrom, dateTo),
+        },
+        {
+          user: { userId: userId },
+          // Also get content from the last 30 days regardless of month boundaries
+          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+        },
+        {
+          user: { userId: userId },
+        }
+      ],
+      order: { createdAt: 'DESC' },
+      relations: ['user'],
+    });
 
-      if (item.blobPath) {
-        sasUrl = await this.generateSasUrl(item.blobPath);
-        previewUrl = await this.generatePreviewUrl(item.blobPath);
-      }
+    this.logger.log(`Found ${combinedContents.length} content items, ${generatedImages.length} generated images, ${generatedVideos.length} generated videos, and ${generatedAudios.length} generated audios for user ${userId}`);
 
-      result.push({
+    // Combine and format all content
+    const allItems: any[] = [];
+
+    // Process content from contents table
+    for (const item of combinedContents) {
+      allItems.push({
         id: item.id,
-        title: item.title,
-        description: item.description,
-        type: item.type,
+        title: item.title || `Content generado el ${item.createdAt.toLocaleDateString()}`,
+        description: item.description || item.prompt || '',
+        type: item.type || 'other',
         createdAt: item.createdAt,
-        sasUrl,
-        previewUrl,
+        duration: item.duration,
+        audioUrl: item.audioUrl,
+        audioDuration: item.audioDuration,
+        audioVoice: item.audioVoice,
+        sasUrl: item.mediaUrl || null,
+        previewUrl: null, // Will be generated below
       });
     }
 
+    // Process content from generated_images table
+    for (const item of generatedImages) {
+      allItems.push({
+        id: item.id,
+        title: `Imagen generada el ${item.createdAt.toLocaleDateString()}`,
+        description: item.prompt || '',
+        type: 'image',
+        createdAt: item.createdAt,
+        sasUrl: item.imageUrl || null,
+        previewUrl: null, // Will be generated below
+      });
+    }
+
+    // Process content from generated_videos table
+    for (const item of generatedVideos) {
+      allItems.push({
+        id: item.id,
+        title: `Video generado el ${item.createdAt.toLocaleDateString()}`,
+        description: item.script || JSON.stringify(item.prompt) || '',
+        type: 'video',
+        createdAt: item.createdAt,
+        duration: null, // Video duration not stored in this entity
+        sasUrl: item.videoUrl || null,
+        previewUrl: null, // Will be generated below
+      });
+    }
+
+    // Process content from generated_audios table
+    for (const item of generatedAudios) {
+      allItems.push({
+        id: item.userId, // Note: This entity uses userId as the primary key
+        title: `Audio generado el ${item.createdAt.toLocaleDateString()}`,
+        description: item.prompt || '',
+        type: 'audio',
+        createdAt: item.createdAt,
+        sasUrl: item.audioUrl || null,
+        previewUrl: null, // Will be generated below
+      });
+    }
+
+    // Sort all items by creation date (newest first)
+    allItems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    // Generate SAS URLs and preview URLs for all items
+    const result = await Promise.all(
+      allItems.map(async (item) => {
+        let sasUrl: string | null = item.sasUrl;
+        let previewUrl: string | null = item.previewUrl;
+
+        // If the mediaUrl already contains a SAS URL, use it directly
+        if (sasUrl && sasUrl.includes('?')) {
+          // Already has SAS token
+          this.logger.log(`Using existing SAS URL for content ${item.id}`);
+        } else if (sasUrl) {
+          // If it's just a blob path, generate a new SAS URL
+          try {
+            const containerName = this.getContainerNameByType(item.type);
+            const blobPath = this.extractBlobPathFromUrl(sasUrl) || sasUrl;
+              
+            // Check if blob exists before generating SAS URL
+            const blobExists = await this.azureBlobService.blobExists(containerName, blobPath);
+            if (blobExists) {
+              sasUrl = await this.azureBlobService.getSignedUrlForContainer(
+                containerName,
+                blobPath,
+                3600, // 1 hour expiration
+              );
+              this.logger.log(`Generated SAS URL for ${item.type} content: ${blobPath}`);
+            } else {
+              this.logger.warn(`Blob not found for content ${item.id}: ${containerName}/${blobPath}`);
+            }
+          } catch (error) {
+            this.logger.error(`Error generating SAS URL for content ${item.id}:`, error);
+          }
+        }
+
+        // Try to generate preview URL if needed
+        if (item.sasUrl) {
+          try {
+            const containerName = this.getContainerNameByType(item.type);
+            const blobPath = this.extractBlobPathFromUrl(item.sasUrl) || item.sasUrl;
+            const previewPath = `thumbnails/${blobPath}`;
+            const previewExists = await this.azureBlobService.blobExists(containerName, previewPath);
+            if (previewExists) {
+              previewUrl = await this.azureBlobService.getSignedUrlForContainer(
+                containerName,
+                previewPath,
+                3600, // 1 hour expiration
+              );
+              this.logger.log(`Generated preview URL for ${item.type} content: ${previewPath}`);
+            } else {
+              this.logger.debug(`Preview not found for content ${item.id}: ${containerName}/${previewPath}`);
+            }
+          } catch (error) {
+            this.logger.error(`Error generating preview URL for content ${item.id}:`, error);
+          }
+        }
+
+        return {
+          ...item,
+          sasUrl,
+          previewUrl,
+        };
+      })
+    );
+
+    this.logger.log(`Gallery data prepared for user ${userId}. Returning ${result.length} items`);
     return result;
   }
-
+  
   /**
-   * Genera SAS URL para un archivo en Azure Blob Storage.
+   * Extracts the blob path from an Azure Blob URL
+   * @param url The full Azure Blob URL
+   * @returns The blob path or null if not a valid Azure Blob URL
    */
-  private async generateSasUrl(blobPath: string): Promise<string> {
-    const expiryDate = new Date();
-    expiryDate.setHours(expiryDate.getHours() + 1);
-
-    const sas = generateBlobSASQueryParameters(
-      {
-        containerName: this.containerName,
-        blobName: blobPath,
-        permissions: BlobSASPermissions.parse('r'),
-        startsOn: new Date(),
-        expiresOn: expiryDate,
-      },
-      new StorageSharedKeyCredential(this.accountName, this.accountKey),
-    ).toString();
-
-    return `https://${this.accountName}.blob.core.windows.net/${this.containerName}/${blobPath}?${sas}`;
-  }
-
-  /**
-   * Genera una URL para preview (si existe miniatura).
-   */
-  private async generatePreviewUrl(blobPath: string): Promise<string> {
-    const previewPath = `thumbnails/${blobPath}`;
-    // Por simplicidad, asumimos que siempre existe, si quieres validar debes usar SDK de Azure
-    return this.generateSasUrl(previewPath);
-  }
-
-  private getRequiredConfig(key: string): string {
-    const value = this.configService.get<string>(key);
-    if (!value) {
-      this.logger.error(`Missing required environment variable: ${key}`);
-      throw new InternalServerErrorException(
-        `Configuration error: Missing ${key}`,
-      );
+  private extractBlobPathFromUrl(url: string): string | null {
+    if (!url) return null;
+      
+    try {
+      const urlObj = new URL(url);
+      // Azure Blob URLs have the format: https://account.blob.core.windows.net/container/blob-path
+      // We want to extract the blob-path part
+      const pathParts = urlObj.pathname.split('/').filter(part => part.length > 0);
+        
+      // The blob path is everything after the container name (second part)
+      if (pathParts.length >= 2) {
+        // Remove the first two parts (empty string and container name) and join the rest
+        return pathParts.slice(1).join('/');
+      }
+        
+      return null;
+    } catch (error) {
+      return null;
     }
-    return value;
+  }
+  
+  /**
+   * Obtiene el nombre del contenedor según el tipo de contenido.
+   */
+  private getContainerNameByType(type: string): string {
+    // These should be injected or configured properly
+    const config = {
+      images: process.env.AZURE_STORAGE_CONTAINER_IMAGES || 'images',
+      videos: process.env.AZURE_STORAGE_CONTAINER_VIDEO || 'videos',
+      audio: process.env.AZURE_STORAGE_CONTAINER_AUDIO || 'audio',
+      default: process.env.AZURE_BLOB_CONTAINER || 'media',
+    };
+
+    switch (type) {
+      case 'image':
+        return config.images;
+      case 'video':
+        return config.videos;
+      case 'audio':
+        return config.audio;
+      default:
+        return config.default;
+    }
   }
 }

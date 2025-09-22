@@ -15,19 +15,31 @@ import {
   Res,
   ValidationPipe,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+} from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { RequestWithUser } from '../../types/request-with-user';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { UseServiceUseCase } from '../../application/use-cases/use-service.use-case';
 import { UserService } from '../../infrastructure/services/user.service';
 import { GeneratedImageService } from '../../infrastructure/services/generated-image.service';
 import { HttpService } from '@nestjs/axios';
 import { MediaBridgeService } from '../../infrastructure/services/media-bridge.service';
-import { Public } from 'src/common/decorators/public.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { AzureBlobService } from '../../infrastructure/services/azure-blob.services';
-import { PaginationDto } from 'src/common/dto/pagination.dto';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
+@ApiTags('media')
 @UseGuards(JwtAuthGuard)
 @Controller('media')
+@ApiBearerAuth()
 export class MediaController {
   private readonly logger = new Logger(MediaController.name);
 
@@ -40,9 +52,10 @@ export class MediaController {
     private readonly azureBlobService: AzureBlobService,
   ) {}
 
-  private extractUserData(req: Request): { userId: string; token: string } {
-    const userId = (req.user as any)?.userId;
-    const token = req.headers.authorization?.replace('Bearer ', '');
+  private extractUserData(req: RequestWithUser): { userId: string; token: string } {
+    const userId = req.user?.id;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader?.replace('Bearer ', '');
     if (!userId || !token) {
       throw new UnauthorizedException(
         'Usuario no autenticado o token no encontrado',
@@ -52,9 +65,26 @@ export class MediaController {
   }
 
   @Post(':type')
+  @ApiOperation({ summary: 'Generate media content' })
+  @ApiParam({
+    name: 'type',
+    enum: ['image', 'video', 'voice', 'music', 'agent'],
+    description: 'Type of media to generate',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', example: 'A beautiful landscape' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Media generated successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad request.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async generate(
     @Param('type') type: string,
-    @Req() req: Request,
+    @Req() req: RequestWithUser,
     @Body() body: any,
   ) {
     const { userId, token } = this.extractUserData(req);
@@ -138,12 +168,15 @@ export class MediaController {
   }
 
   @Get('images')
+  @ApiOperation({ summary: 'Get generated images' })
+  @ApiResponse({ status: 200, description: 'Returns generated images.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getImages(
-    @Req() req: Request,
+    @Req() req: RequestWithUser,
     @Query(new ValidationPipe({ transform: true }))
     paginationDto: PaginationDto,
   ) {
-    const userId = (req.user as any).sub;
+    const userId = req.user.id;
     const images = await this.imageService.getImagesByUserId(
       userId,
       paginationDto,
@@ -153,6 +186,10 @@ export class MediaController {
 
   @Get('proxy-image')
   @Public()
+  @ApiOperation({ summary: 'Proxy an image from a URL' })
+  @ApiQuery({ name: 'url', type: 'string', description: 'URL of the image to proxy' })
+  @ApiResponse({ status: 200, description: 'Image proxied successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad request.' })
   async proxyImage(@Query('url') url: string, @Res() res: Response) {
     try {
       const imageResponse = await this.httpService.axiosRef.get(url, {
@@ -171,6 +208,10 @@ export class MediaController {
   }
 
   @Get('preview/:filename')
+  @ApiOperation({ summary: 'Serve audio file preview' })
+  @ApiParam({ name: 'filename', type: 'string', description: 'Name of the audio file' })
+  @ApiResponse({ status: 200, description: 'Audio file served successfully.' })
+  @ApiResponse({ status: 404, description: 'Audio file not found.' })
   async serveAudio(@Param('filename') filename: string, @Res() res: Response) {
     try {
       const buffer = await this.mediaBridgeService.fetchAudioFile(filename);
@@ -183,6 +224,10 @@ export class MediaController {
   }
 
   @Get('/signed-image/:filename')
+  @ApiOperation({ summary: 'Get signed URL for an image' })
+  @ApiParam({ name: 'filename', type: 'string', description: 'Name of the image file' })
+  @ApiResponse({ status: 200, description: 'Signed URL generated successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getSignedImageUrl(@Param('filename') filename: string) {
     const signedUrl = await this.azureBlobService.getSignedUrl(filename, 86400);
     return { url: signedUrl };
@@ -190,12 +235,15 @@ export class MediaController {
 
   @Get('my-images')
   @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get my images' })
+  @ApiResponse({ status: 200, description: 'Returns user images.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getMyImages(
-    @Req() req: Request,
+    @Req() req: RequestWithUser,
     @Query(new ValidationPipe({ transform: true }))
     paginationDto: PaginationDto,
   ) {
-    const userId = (req.user as any)?.sub;
+    const userId = req.user.id;
     if (!userId) {
       throw new UnauthorizedException(
         'No se pudo obtener el usuario del token',

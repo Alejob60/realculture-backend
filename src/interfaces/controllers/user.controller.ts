@@ -10,14 +10,24 @@ import {
   Query,
   ValidationPipe,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiBody,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RequestWithUser } from 'src/types/request-with-user';
 import { GeneratedImageService } from '../../infrastructure/services/generated-image.service';
-import { UserService } from 'src/infrastructure/services/user.service';
-import { PaginationDto } from 'src/common/dto/pagination.dto';
+import { UserService } from '../../infrastructure/services/user.service';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
+@ApiTags('user')
 @Controller('user')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class UserController {
   constructor(
     private readonly userService: UserService,
@@ -25,6 +35,9 @@ export class UserController {
   ) {}
 
   @Get('credits')
+  @ApiOperation({ summary: 'Get user credits' })
+  @ApiResponse({ status: 200, description: 'Returns the user credits.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getCredits(@Req() req: RequestWithUser) {
     const userId = req.user?.id;
     if (!userId) {
@@ -34,6 +47,10 @@ export class UserController {
   }
 
   @Get('me')
+  @ApiOperation({ summary: 'Get user profile' })
+  @ApiResponse({ status: 200, description: 'Returns the user profile.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
   async getProfile(@Req() req: RequestWithUser) {
     const userId = req.user?.id;
     if (!userId) {
@@ -43,6 +60,9 @@ export class UserController {
   }
 
   @Get('images')
+  @ApiOperation({ summary: 'Get user images' })
+  @ApiResponse({ status: 200, description: 'Returns the user images.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getUserImages(
     @Req() req: RequestWithUser,
     @Query(new ValidationPipe({ transform: true }))
@@ -56,6 +76,18 @@ export class UserController {
   }
 
   @Patch('admin/set-credits')
+  @ApiOperation({ summary: 'Set user credits (admin only)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        credits: { type: 'number', example: 100 },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Credits updated successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad request.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async setCredits(
     @Req() req: RequestWithUser,
     @Body() body: { credits: number },
@@ -77,6 +109,18 @@ export class UserController {
   }
 
   @Patch('decrement-credits')
+  @ApiOperation({ summary: 'Decrement user credits' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        amount: { type: 'number', example: 5 },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Credits decremented successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad request.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async decrementCredits(
     @Req() req: RequestWithUser,
     @Body() body: { amount: number },
@@ -102,7 +146,20 @@ export class UserController {
       credits: updatedUser.credits,
     };
   }
+  
   @Patch('upgrade')
+  @ApiOperation({ summary: 'Upgrade user plan' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        newPlan: { type: 'string', example: 'PRO', enum: ['CREATOR', 'PRO'] },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Plan upgraded successfully.' })
+  @ApiResponse({ status: 400, description: 'Bad request.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async upgradePlan(
     @Req() req: RequestWithUser,
     @Body() body: { newPlan: 'CREATOR' | 'PRO' },

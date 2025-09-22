@@ -6,7 +6,7 @@ import { UserService } from '../services/user.service';
 import { UserRepository } from '../database/user.repository';
 import { LoginUseCase } from '../../application/use-cases/login.use-case';
 import { AuthModule } from '../../auth.module';
-import { UseServiceUseCase } from 'src/application/use-cases/use-service.use-case';
+import { UseServiceUseCase } from '../../application/use-cases/use-service.use-case';
 import { MediaModule } from './media.module';
 
 @Module({

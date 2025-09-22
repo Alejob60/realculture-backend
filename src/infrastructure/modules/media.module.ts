@@ -7,17 +7,29 @@ import { GeneratedImageService } from '../services/generated-image.service';
 import { AzureBlobService } from '../services/azure-blob.services';
 import { DatabaseModule } from '../database/database.module';
 import { UserModule } from './user.module';
+import { ContentModule } from './content.module';
 import { forwardRef } from '@nestjs/common';
+import { PromoImageService } from '../services/promo-image.service';
 
 @Module({
   imports: [
     DatabaseModule,
     HttpModule,
+    ContentModule,
     forwardRef(() => UserModule), // Si hay dependencia circular, usar forwardRef
   ],
   controllers: [MediaController, PromoImageController],
-  providers: [MediaBridgeService, GeneratedImageService, AzureBlobService],
-  exports: [MediaBridgeService, AzureBlobService, GeneratedImageService],
+  providers: [
+    MediaBridgeService, 
+    GeneratedImageService, 
+    AzureBlobService,
+    PromoImageService,
+  ],
+  exports: [
+    MediaBridgeService, 
+    AzureBlobService, 
+    GeneratedImageService,
+    PromoImageService,
+  ],
 })
 export class MediaModule {}
-
