@@ -105,9 +105,20 @@ export class PromptJsonController {
         throw new HttpException('Créditos insuficientes', HttpStatus.FORBIDDEN);
       }
 
+      // Validate prompt before calling the service
       if (!body?.prompt || typeof body.prompt !== 'string' || body.prompt.trim() === '') {
         this.logger.warn(`Invalid prompt provided: ${JSON.stringify(body)}`);
         throw new HttpException('Prompt inválido o vacío', HttpStatus.BAD_REQUEST);
+      }
+
+      // Additional validation for prompt length
+      const trimmedPrompt = body.prompt.trim();
+      if (trimmedPrompt.length < 5) {
+        this.logger.warn(`Prompt too short: ${trimmedPrompt} (${trimmedPrompt.length} characters)`);
+        throw new HttpException(
+          'El prompt debe tener al menos 5 caracteres',
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
       this.logger.log(`Calling promptJsonService with prompt: ${body.prompt}`);
@@ -123,6 +134,10 @@ export class PromptJsonController {
       };
     } catch (error) {
       this.logger.error(`Error al generar JSON: ${error.message}`, error.stack);
+      // Pass through HttpExceptions as they are, but provide better error messages for common cases
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         'Error interno del servidor',
         HttpStatus.INTERNAL_SERVER_ERROR,

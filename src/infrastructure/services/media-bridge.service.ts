@@ -60,21 +60,18 @@ export class MediaBridgeService {
         const status = error.response?.status;
         const errorData = JSON.stringify(error.response?.data);
         const errorMessage = error.message;
-        const errorStack = error.stack;
         
         this.logger.error(
           `❌ Error al generar imagen (bridge): Status ${status} - Data: ${errorData} - Message: ${errorMessage}`,
         );
         
-        // Log additional details for debugging
+        // Log additional details for debugging without trying to stringify circular objects
         if (error.request) {
-          this.logger.error(`❌ Request details: ${JSON.stringify(error.request)}`);
+          // Instead of trying to stringify the entire request object, we just log that it exists
+          this.logger.error(`❌ Request details: Request object exists but contains circular references`);
         }
         if (error.config) {
           this.logger.error(`❌ Config details: ${JSON.stringify(error.config)}`);
-        }
-        if (errorStack) {
-          this.logger.error(`❌ Stack trace: ${errorStack}`);
         }
         
         throw new HttpException(
