@@ -1,0 +1,23 @@
+# CURL commands to test the gallery endpoint
+
+# 1. First, authenticate to get a token
+curl -X POST http://localhost:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "testpassword123"
+  }'
+
+# 2. Copy the token from the response above and use it in the next request
+# Replace YOUR_TOKEN_HERE with the actual token
+
+curl -X GET http://localhost:3001/api/gallery \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 3. To filter by type (e.g., only images)
+curl -X GET "http://localhost:3001/api/gallery?type=image" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 4. To get paginated results
+curl -X GET "http://localhost:3001/api/gallery?page=1&limit=5" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"

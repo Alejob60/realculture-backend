@@ -1,17 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, MoreThan } from 'typeorm';
-import { GeneratedImageEntity } from '../../domain/entities/generated-image.entity';
-import { UserEntity } from '../../domain/entities/user.entity';
+import { LessThan, MoreThan } from 'typeorm';
 import { AzureBlobService } from '../services/azure-blob.services';
+import { GeneratedImageRepository } from '../database/generated-image.repository';
+import { UserRepository } from '../database/user.repository';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @Injectable()
 export class GeneratedImageService {
   constructor(
-    @InjectRepository(GeneratedImageEntity)
-    private readonly repo: Repository<GeneratedImageEntity>,
-    @InjectRepository(UserEntity)
-    private readonly userRepo: Repository<UserEntity>,
+    private readonly generatedImageRepository: GeneratedImageRepository,
+    private readonly userRepository: UserRepository,
     private readonly azureBlobService: AzureBlobService,
   ) {}
 
@@ -22,7 +20,7 @@ export class GeneratedImageService {
     filename: string,
     plan: string,
   ) {
-    const user = await this.userRepo.findOne({ where: { userId } });
+    const user = await this.userRepository.findById(userId);
     if (!user) throw new Error('Usuario no encontrado');
 
     const expiresAt = new Date();
@@ -32,7 +30,7 @@ export class GeneratedImageService {
       expiresAt.setDate(expiresAt.getDate() + 30); // 30 días
     }
 
-    const image = this.repo.create({
+    const image = this.generatedImageRepository.create({
       user,
       prompt,
       imageUrl,
@@ -41,7 +39,7 @@ export class GeneratedImageService {
       expiresAt,
     });
 
-    await this.repo.save(image);
+    await this.generatedImageRepository.save(image);
     return {
       success: true,
       message: '✅ Imagen guardada en la galería',
@@ -49,21 +47,18 @@ export class GeneratedImageService {
     };
   }
 
-  async getImagesByUserId(userId: string) {
-    const user = await this.userRepo.findOne({ where: { userId } });
+  async getImagesByUserId(userId: string, paginationDto: PaginationDto) {
+    const user = await this.userRepository.findById(userId);
     if (!user) throw new Error('Usuario no encontrado');
 
-    const now = new Date();
+    const { page = 1, limit = 10 } = paginationDto;
+    const { data: images, total } =
+      await this.generatedImageRepository.findAndCountByUserId(
+        userId,
+        page,
+        limit,
+      );
 
-    const images = await this.repo.find({
-      where: {
-        user,
-        expiresAt: MoreThan(now),
-      },
-      order: { createdAt: 'DESC' },
-    });
-
-    // 🔐 Generar SAS URL por imagen
     const result = await Promise.all(
       images.map(async (img) => {
         const signedUrl = await this.azureBlobService.getSignedUrl(
@@ -81,17 +76,23 @@ export class GeneratedImageService {
       }),
     );
 
-    return result;
+    return {
+      data: result,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async deleteExpiredImages() {
     const now = new Date();
-    const expiredImages = await this.repo.find({
+    const expiredImages = await this.generatedImageRepository.find({
       where: { expiresAt: LessThan(now) },
     });
 
     if (expiredImages.length > 0) {
-      await this.repo.remove(expiredImages);
+      await this.generatedImageRepository.remove(expiredImages);
     }
   }
 }

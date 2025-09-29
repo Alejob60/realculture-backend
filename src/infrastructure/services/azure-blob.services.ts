@@ -13,8 +13,8 @@ import * as path from 'path';
 export class AzureBlobService {
   private readonly logger = new Logger(AzureBlobService.name);
   private readonly containerName =
-    process.env.AZURE_STORAGE_CONTAINER_IMAGES || 'images';
-  private readonly account = process.env.AZURE_STORAGE_ACCOUNT_NAME!;
+    process.env.AZURE_STORAGE_CONTAINER_IMAGES || process.env.AZURE_BLOB_CONTAINER || 'images';
+  private readonly account = process.env.AZURE_STORAGE_ACCOUNT!;
   private readonly accountKey = process.env.AZURE_STORAGE_KEY!;
   private readonly sharedKeyCredential: StorageSharedKeyCredential;
   private readonly blobServiceClient: BlobServiceClient;
@@ -84,6 +84,72 @@ export class AzureBlobService {
     this.logger.log(`🔐 URL firmada generada: ${signedUrl}`);
     return signedUrl;
   }
+  public getContainerClient(containerName?: string) {
+    return this.blobServiceClient.getContainerClient(containerName || this.containerName);
+  }
+  
+  async checkIfBlobExists(blobName: string, container?: string): Promise<boolean> {
+    try {
+      const client = this.getContainerClient(container);
+      const blobClient = client.getBlobClient(blobName);
+      const exists = await blobClient.exists();
+      return exists;
+    } catch (error) {
+      this.logger.error(`❌ Error verificando existencia de blob ${blobName}`, error);
+      return false;
+    }
+  }
+  /**
+   * Sube un buffer a un contenedor y blob específicos.
+   */
+  async uploadBufferToContainer(
+    buffer: Buffer,
+    blobName: string,
+    containerName: string,
+    contentType?: string,
+  ): Promise<string> {
+    const containerClient =
+      this.blobServiceClient.getContainerClient(containerName);
+    await containerClient.createIfNotExists();
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
+    await blockBlobClient.upload(buffer, buffer.length, {
+      blobHTTPHeaders: { blobContentType: contentType },
+    });
+
+    this.logger.log(`📤 Buffer subido a ${containerName}/${blobName}`);
+    return blockBlobClient.url;
+  }
+
+  /**
+   * Devuelve una URL firmada SAS para un blob en un contenedor específico.
+   */
+  async getSignedUrlForContainer(
+    containerName: string,
+    blobName: string,
+    expiresInSeconds = 86400,
+  ): Promise<string> {
+    const containerClient =
+      this.blobServiceClient.getContainerClient(containerName);
+    const blobClient = containerClient.getBlobClient(blobName);
+
+    const expiresOn = new Date(Date.now() + expiresInSeconds * 1000);
+
+    const sasToken = generateBlobSASQueryParameters(
+      {
+        containerName: containerName,
+        blobName: blobName,
+        permissions: BlobSASPermissions.parse('r'),
+        expiresOn,
+        protocol: SASProtocol.Https,
+      },
+      this.sharedKeyCredential,
+    ).toString();
+
+    const signedUrl = `${blobClient.url}?${sasToken}`;
+    this.logger.log(`🔐 URL firmada generada para ${containerName}/${blobName}`);
+    return signedUrl;
+  }
 
   /**
    * Elimina un archivo del contenedor de Azure.
@@ -101,5 +167,31 @@ export class AzureBlobService {
     } else {
       this.logger.warn(`⚠️ Blob no encontrado para eliminar: ${filename}`);
     }
+  }
+
+  /**
+   * Verifica si un blob existe en un contenedor específico
+   */
+  async blobExists(containerName: string, blobName: string): Promise<boolean> {
+    try {
+      const containerClient = this.blobServiceClient.getContainerClient(containerName);
+      const blobClient = containerClient.getBlobClient(blobName);
+      return await blobClient.exists();
+    } catch (error) {
+      this.logger.error(`❌ Error verificando existencia de blob ${containerName}/${blobName}`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Sube un texto (ej: SRT) a un blob
+   */
+  async uploadText(blobName: string, content: string, containerName?: string): Promise<void> {
+    const containerClient = this.blobServiceClient.getContainerClient(containerName || this.containerName);
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    await blockBlobClient.upload(content, Buffer.byteLength(content), {
+      blobHTTPHeaders: { blobContentType: 'text/plain' },
+    });
+    this.logger.log(`📤 Texto subido a ${containerName || this.containerName}/${blobName}`);
   }
 }

@@ -4,18 +4,17 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { UserEntity } from './user.entity';
 
 @Entity('generated_music')
 export class GeneratedMusicEntity {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @Column()
   userId: string;
 
   @ManyToOne(() => UserEntity, (user) => user.generatedMusic)
+  @JoinColumn({ name: 'user_id' }) // Define explícitamente la FK en la BD
   user: UserEntity;
 
   @Column()

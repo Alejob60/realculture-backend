@@ -1,49 +1,70 @@
 import {
   Controller,
   Get,
-  Post,
-  Req,
+  Query,
   UseGuards,
-  Body,
+  Req,
+  ForbiddenException,
+  Logger,
   BadRequestException,
 } from '@nestjs/common';
-import { Request } from 'express';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { GeneratedImageService } from '../../infrastructure/services/generated-image.service';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
+import { GalleryService } from '../../infrastructure/services/gallery.service';
+import { JwtAuthGuard } from '../../interfaces/guards/jwt-auth.guard';
+import { GalleryQueryDto } from '../dto/gallery-query.dto';
+import { UserRole } from '../../domain/enums/user-role.enum';
+import { RequestWithUser } from 'src/types/request-with-user';
 
-@UseGuards(JwtAuthGuard)
+@ApiTags('gallery')
 @Controller('gallery')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class GalleryController {
-  constructor(private readonly generatedImageService: GeneratedImageService) {}
+  private readonly logger = new Logger(GalleryController.name);
 
-  @Post('save-image')
-  async saveImage(
-    @Req() req: Request,
-    @Body() body: { prompt: string; imageUrl: string },
-  ) {
-    const userId = req.user?.['userId'];
-    if (!userId) {
-      throw new BadRequestException('No se pudo obtener el userId del token');
+  constructor(private readonly galleryService: GalleryService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get user gallery (Creator/PRO only)' })
+  @ApiQuery({ type: GalleryQueryDto })
+  @ApiResponse({ status: 200, description: 'Returns user gallery.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 400, description: 'Bad Request.' })
+  async getGallery(@Req() req: RequestWithUser, @Query() query: GalleryQueryDto) {
+    const user = req.user;
+    
+    // Validate user object
+    if (!user) {
+      this.logger.error('User object is undefined in request');
+      throw new BadRequestException('User information is missing from request');
     }
-
-    const filename = `image_${Date.now()}.jpg`; // 🛡️ genera nombre único
-
-    return this.generatedImageService.saveImage(
-      userId,
-      body.prompt,
-      body.imageUrl,
-      filename,
-      'FREE',
-    );
-  }
-
-  @Get('my-images')
-  async getUserImages(@Req() req: Request) {
-    const userId = req.user?.['userId'];
-    if (!userId) {
-      throw new BadRequestException('No se pudo obtener el userId del token');
+    
+    // Validate user ID
+    if (!user.id) {
+      this.logger.error('User ID is undefined in request');
+      throw new BadRequestException('User ID is missing from request');
     }
-
-    return this.generatedImageService.getImagesByUserId(userId);
+    
+    this.logger.log(`Gallery request received for user: ${user.id}, role: ${user.role}`);
+    
+    if (user.role !== UserRole.CREATOR && user.role !== UserRole.PRO) {
+      this.logger.warn(`User ${user.id} with role ${user.role} attempted to access gallery but was forbidden`);
+      throw new ForbiddenException('You do not have permission to access the gallery.');
+    }
+    
+    this.logger.log(`User ${user.id} authorized to access gallery, fetching gallery data`);
+    const galleryData = await this.galleryService.getUserGallery(user.id);
+    
+    this.logger.log(`Gallery data fetched for user ${user.id}. Item count: ${galleryData.length}`);
+    this.logger.debug(`Gallery data: ${JSON.stringify(galleryData, null, 2)}`);
+    
+    return galleryData;
   }
 }

@@ -1,8 +1,9 @@
-// src/infrastructure/modules/azure-blob.module.ts
 import { Module } from '@nestjs/common';
-import { AzureBlobService } from '../../infrastructure/services/azure-blob.services';
+import { AzureBlobService } from '../services/azure-blob.services';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
+  imports: [ConfigModule],
   providers: [AzureBlobService],
   exports: [AzureBlobService],
 })

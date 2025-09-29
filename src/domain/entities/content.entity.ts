@@ -3,40 +3,68 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
+  JoinColumn,
 } from 'typeorm';
-
-import { UserEntity } from '../../domain/entities/user.entity';
+import { UserEntity } from './user.entity';
 
 @Entity('contents')
 export class Content {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
-  title: string;
-
-  @Column({ type: 'text' })
-  description: string;
-
   @Column({ nullable: true })
+  type: string;
+
+  @Column({ type: 'text', nullable: true })
+  prompt: string;
+
+  @Column({ nullable: true, name: 'media_url' })
   mediaUrl: string;
 
-  @Column({ nullable: true })
-  duration?: number; // en segundos (opcional para audio/video)
+  @Column({ default: 'success' })
+  status: string;
 
-  @Column({ default: 'other' })
-  type: 'image' | 'audio' | 'video' | 'text' | 'other';
-
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @ManyToOne(() => UserEntity, (user) => user.contents)
-  creator?: UserEntity;
+  @Column({ type: 'timestamp', nullable: true, name: 'expires_at' })
+  expiresAt: Date;
 
   @Column({ nullable: true })
-  userId?: string; // para relaciones sin instanciar entidad completa
+  filename: string;
 
-  @Column({ default: 'completed' })
-  status: string;
+  @Column({ type: 'float', nullable: true })
+  duration: number;
+
+  @Column({ nullable: true })
+  title: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: any;
+
+  @Column({ nullable: true, name: 'audio_url' })
+  audioUrl: string;
+
+  @Column({ type: 'float', nullable: true, name: 'audio_duration' })
+  audioDuration: number;
+
+  @Column({ nullable: true, name: 'audio_voice' })
+  audioVoice: string;
+
+  @ManyToOne(() => UserEntity, (user) => user.contents, { nullable: true, eager: true })
+  @JoinColumn({ name: 'creatorUserId', referencedColumnName: 'userId' })
+  creator: UserEntity;
+
+  // Add userId property to access the foreign key value directly
+  @Column({ nullable: true, name: 'creatorUserId' })
+  userId: string;
+
+  // Make updated_at column optional since it doesn't exist in the database
+  @UpdateDateColumn({ name: 'updated_at', nullable: true })
+  updatedAt: Date;
 }

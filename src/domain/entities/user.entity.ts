@@ -7,41 +7,53 @@ import {
 } from 'typeorm';
 import { Content } from './content.entity';
 import { GeneratedImageEntity } from './generated-image.entity';
-import { UserRole } from '../enums/user-role.enum';
 import { GeneratedVideoEntity } from './generated-video.entity';
 import { GeneratedAudioEntity } from './generated-audio.entity';
 import { GeneratedMusicEntity } from './generated-music.entity';
-// src/domain/entities/user.entity.ts
+import { UserRole } from '../enums/user-role.enum';
+
 @Entity('users')
 export class UserEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid', { name: 'userId' })
   userId: string;
 
-  @Column()
+  @Column({ name: 'email' })
   email: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'name', nullable: true })
   name?: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'password', nullable: true })
   password?: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'googleId', nullable: true })
   googleId?: string;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.FREE })
+  @Column({ name: 'role', type: 'enum', enum: UserRole, default: UserRole.FREE })
   role: UserRole;
 
-  @Column({ default: 'FREE' }) // ✅ Nuevo: campo 'plan'
+  @Column({ name: 'plan', default: 'FREE' })
   plan: string;
 
-  @Column({ nullable: true }) // ✅ Nuevo: campo 'picture' (avatar opcional)
+  @Column({ name: 'picture', nullable: true })
   picture?: string;
 
-  @Column({ type: 'int', default: 25 })
+  @Column({ name: 'credits', type: 'int', default: 25 })
   credits: number;
 
-  @CreateDateColumn()
+  @Column({ name: 'hashed_refresh_token', nullable: true })
+  hashedRefreshToken?: string;
+
+  @Column({ name: 'resetToken', nullable: true })
+  resetToken?: string;
+
+  @Column({ name: 'resetTokenExpires', type: 'timestamp', nullable: true })
+  resetTokenExpires?: Date;
+
+  @Column({ name: 'isResetting', type: 'boolean', default: false })
+  isResetting: boolean;
+
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 
   @OneToMany(() => Content, (content) => content.creator)

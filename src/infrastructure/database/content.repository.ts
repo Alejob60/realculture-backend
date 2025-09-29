@@ -14,8 +14,19 @@ export class ContentRepository {
     return this.repo.save(content);
   }
 
-  async findAll(): Promise<Content[]> {
-    return this.repo.find({ relations: ['creator'] });
+  async findAll(
+    page: number,
+    limit: number,
+  ): Promise<{ data: Content[]; total: number }> {
+    const [data, total] = await this.repo.findAndCount({
+      relations: ['creator'],
+      skip: (page - 1) * limit,
+      take: limit,
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+    return { data, total };
   }
 
   async findOne(id: string): Promise<Content | null> {

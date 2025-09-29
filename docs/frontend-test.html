@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RealCulture AI Frontend Integration Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        input, textarea, button, select {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .response {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .error {
+            border-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .hidden {
+            display: none;
+        }
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .gallery-item {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        .gallery-item img, .gallery-item video {
+            max-width: 100%;
+            height: auto;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background-color: #e9ecef;
+            border: none;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: #007bff;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>RealCulture AI Frontend Integration Test</h1>
+    
+    <div class="container">
+        <h2>Authentication</h2>
+        <div id="auth-section">
+            <input type="text" id="name" placeholder="Name" value="Test User">
+            <input type="email" id="email" placeholder="Email" value="test@example.com">
+            <input type="password" id="password" placeholder="Password" value="testpassword123">
+            
+            <button id="register-btn">Register</button>
+            <button id="login-btn">Login</button>
+            
+            <div id="auth-response" class="response hidden"></div>
+        </div>
+        
+        <div id="user-section" class="hidden">
+            <h3>User Information</h3>
+            <button id="get-user-btn">Get User Info</button>
+            <button id="get-credits-btn">Get Credits</button>
+            <div id="user-response" class="response hidden"></div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Media Generation</h2>
+        <div id="media-section">
+            <textarea id="prompt" placeholder="Enter your prompt here..." rows="3">Create a futuristic cityscape at night</textarea>
+            
+            <button id="generate-image-btn" disabled>Generate Image</button>
+            <button id="generate-video-btn" disabled>Generate Video</button>
+            <button id="generate-json-btn" disabled>Generate JSON Prompt</button>
+            
+            <div id="media-response" class="response hidden"></div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Gallery</h2>
+        <div id="gallery-section">
+            <div class="tabs">
+                <button class="tab active" data-tab="gallery">User Gallery</button>
+                <button class="tab" data-tab="images">My Images</button>
+            </div>
+            
+            <div id="gallery-tab" class="tab-content active">
+                <button id="get-gallery-btn" disabled>Load Gallery</button>
+                <div id="gallery-content" class="gallery-grid"></div>
+            </div>
+            
+            <div id="images-tab" class="tab-content">
+                <button id="get-images-btn" disabled>Load My Images</button>
+                <div id="images-content" class="gallery-grid"></div>
+            </div>
+            
+            <div id="gallery-response" class="response hidden"></div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Health Check</h2>
+        <div id="health-section">
+            <button id="ping-btn">Ping</button>
+            <button id="db-health-btn">Database Health</button>
+            <div id="health-response" class="response hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const BASE_URL = 'http://localhost:3001';
+        let authToken = null;
+        let refreshToken = null;
+        
+        // DOM Elements
+        const authSection = document.getElementById('auth-section');
+        const userSection = document.getElementById('user-section');
+        const mediaSection = document.getElementById('media-section');
+        const gallerySection = document.getElementById('gallery-section');
+        const healthSection = document.getElementById('health-section');
+        
+        const nameInput = document.getElementById('name');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const promptInput = document.getElementById('prompt');
+        
+        const registerBtn = document.getElementById('register-btn');
+        const loginBtn = document.getElementById('login-btn');
+        const getUserBtn = document.getElementById('get-user-btn');
+        const getCreditsBtn = document.getElementById('get-credits-btn');
+        const generateImageBtn = document.getElementById('generate-image-btn');
+        const generateVideoBtn = document.getElementById('generate-video-btn');
+        const generateJsonBtn = document.getElementById('generate-json-btn');
+        const getGalleryBtn = document.getElementById('get-gallery-btn');
+        const getImagesBtn = document.getElementById('get-images-btn');
+        const pingBtn = document.getElementById('ping-btn');
+        const dbHealthBtn = document.getElementById('db-health-btn');
+        
+        const authResponse = document.getElementById('auth-response');
+        const userResponse = document.getElementById('user-response');
+        const mediaResponse = document.getElementById('media-response');
+        const galleryResponse = document.getElementById('gallery-response');
+        const healthResponse = document.getElementById('health-response');
+        
+        const galleryContent = document.getElementById('gallery-content');
+        const imagesContent = document.getElementById('images-content');
+        
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and contents
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                
+                // Show corresponding content
+                const tabName = tab.getAttribute('data-tab');
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+            });
+        });
+        
+        // Utility Functions
+        function showResponse(element, data, isSuccess = true) {
+            element.textContent = JSON.stringify(data, null, 2);
+            element.classList.remove('hidden', 'success', 'error');
+            element.classList.add(isSuccess ? 'success' : 'error');
+        }
+        
+        function hideResponse(element) {
+            element.classList.add('hidden');
+        }
+        
+        function enableMediaButtons() {
+            generateImageBtn.disabled = false;
+            generateVideoBtn.disabled = false;
+            generateJsonBtn.disabled = false;
+            getGalleryBtn.disabled = false;
+            getImagesBtn.disabled = false;
+        }
+        
+        function disableMediaButtons() {
+            generateImageBtn.disabled = true;
+            generateVideoBtn.disabled = true;
+            generateJsonBtn.disabled = true;
+            getGalleryBtn.disabled = true;
+            getImagesBtn.disabled = true;
+        }
+        
+        function renderGalleryItems(container, items) {
+            container.innerHTML = '';
+            
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p>No items found</p>';
+                return;
+            }
+            
+            items.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'gallery-item';
+                
+                let content = `<h4>${item.title || 'Untitled'}</h4>`;
+                content += `<p>Type: ${item.type}</p>`;
+                content += `<p>Created: ${new Date(item.createdAt).toLocaleString()}</p>`;
+                
+                if (item.sasUrl) {
+                    if (item.type === 'image') {
+                        content += `<img src="${item.sasUrl}" alt="${item.title || 'Image'}" />`;
+                    } else if (item.type === 'video') {
+                        content += `<video controls><source src="${item.sasUrl}" type="video/mp4">Your browser does not support the video tag.</video>`;
+                    } else {
+                        content += `<a href="${item.sasUrl}" target="_blank">View File</a>`;
+                    }
+                }
+                
+                if (item.previewUrl) {
+                    content += `<img src="${item.previewUrl}" alt="Preview" style="width:100%;margin-top:10px;" />`;
+                }
+                
+                itemElement.innerHTML = content;
+                container.appendChild(itemElement);
+            });
+        }
+        
+        function renderImageItems(container, imageData) {
+            container.innerHTML = '';
+            
+            if (!imageData || !imageData.data || imageData.data.length === 0) {
+                container.innerHTML = '<p>No images found</p>';
+                return;
+            }
+            
+            imageData.data.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'gallery-item';
+                
+                let content = `<h4>${item.prompt || 'Untitled'}</h4>`;
+                content += `<p>Created: ${new Date(item.createdAt).toLocaleString()}</p>`;
+                content += `<p>Expires: ${new Date(item.expiresAt).toLocaleString()}</p>`;
+                
+                if (item.url) {
+                    content += `<img src="${item.url}" alt="${item.prompt || 'Image'}" />`;
+                }
+                
+                itemElement.innerHTML = content;
+                container.appendChild(itemElement);
+            });
+        }
+        
+        // API Functions
+        async function apiCall(url, method = 'GET', data = null, authenticated = false) {
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            
+            if (authenticated && authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            
+            const config = {
+                method,
+                headers,
+            };
+            
+            if (data) {
+                config.body = JSON.stringify(data);
+            }
+            
+            try {
+                const response = await fetch(`${BASE_URL}${url}`, config);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || `HTTP Error: ${response.status}`);
+                }
+                
+                return result;
+            } catch (error) {
+                throw new Error(error.message || 'Network error');
+            }
+        }
+        
+        // Authentication Functions
+        async function register() {
+            try {
+                const data = {
+                    name: nameInput.value,
+                    email: emailInput.value,
+                    password: passwordInput.value
+                };
+                
+                const result = await apiCall('/api/auth/register', 'POST', data);
+                authToken = result.token;
+                refreshToken = result.refreshToken;
+                
+                showResponse(authResponse, result, true);
+                userSection.classList.remove('hidden');
+                enableMediaButtons();
+            } catch (error) {
+                showResponse(authResponse, { error: error.message }, false);
+            }
+        }
+        
+        async function login() {
+            try {
+                const data = {
+                    email: emailInput.value,
+                    password: passwordInput.value
+                };
+                
+                const result = await apiCall('/api/auth/login', 'POST', data);
+                authToken = result.token;
+                refreshToken = result.refreshToken;
+                
+                showResponse(authResponse, result, true);
+                userSection.classList.remove('hidden');
+                enableMediaButtons();
+            } catch (error) {
+                showResponse(authResponse, { error: error.message }, false);
+            }
+        }
+        
+        async function getUserInfo() {
+            try {
+                const result = await apiCall('/api/auth/me', 'GET', null, true);
+                showResponse(userResponse, result, true);
+            } catch (error) {
+                showResponse(userResponse, { error: error.message }, false);
+            }
+        }
+        
+        async function getUserCredits() {
+            try {
+                const result = await apiCall('/api/user/credits', 'GET', null, true);
+                showResponse(userResponse, result, true);
+            } catch (error) {
+                showResponse(userResponse, { error: error.message }, false);
+            }
+        }
+        
+        // Media Generation Functions
+        async function generateImage() {
+            try {
+                const data = {
+                    prompt: promptInput.value
+                };
+                
+                const result = await apiCall('/api/media/image', 'POST', data, true);
+                showResponse(mediaResponse, result, true);
+            } catch (error) {
+                showResponse(mediaResponse, { error: error.message }, false);
+            }
+        }
+        
+        async function generateVideo() {
+            try {
+                const data = {
+                    prompt: promptInput.value
+                };
+                
+                const result = await apiCall('/api/video/generate', 'POST', data, true);
+                showResponse(mediaResponse, result, true);
+            } catch (error) {
+                showResponse(mediaResponse, { error: error.message }, false);
+            }
+        }
+        
+        async function generateJson() {
+            try {
+                const data = {
+                    prompt: promptInput.value
+                };
+                
+                const result = await apiCall('/api/prompt-json', 'POST', data, true);
+                showResponse(mediaResponse, result, true);
+            } catch (error) {
+                showResponse(mediaResponse, { error: error.message }, false);
+            }
+        }
+        
+        // Gallery Functions
+        async function getGallery() {
+            try {
+                hideResponse(galleryResponse);
+                const result = await apiCall('/api/gallery', 'GET', null, true);
+                renderGalleryItems(galleryContent, result);
+            } catch (error) {
+                showResponse(galleryResponse, { error: error.message }, false);
+                galleryContent.innerHTML = '';
+            }
+        }
+        
+        async function getMyImages() {
+            try {
+                hideResponse(galleryResponse);
+                const result = await apiCall('/api/media/my-images', 'GET', null, true);
+                renderImageItems(imagesContent, result);
+            } catch (error) {
+                showResponse(galleryResponse, { error: error.message }, false);
+                imagesContent.innerHTML = '';
+            }
+        }
+        
+        // Health Check Functions
+        async function ping() {
+            try {
+                const result = await apiCall('/api/health/ping', 'GET');
+                showResponse(healthResponse, result, true);
+            } catch (error) {
+                showResponse(healthResponse, { error: error.message }, false);
+            }
+        }
+        
+        async function dbHealth() {
+            try {
+                const result = await apiCall('/api/health/db', 'GET');
+                showResponse(healthResponse, result, true);
+            } catch (error) {
+                showResponse(healthResponse, { error: error.message }, false);
+            }
+        }
+        
+        // Event Listeners
+        registerBtn.addEventListener('click', register);
+        loginBtn.addEventListener('click', login);
+        getUserBtn.addEventListener('click', getUserInfo);
+        getCreditsBtn.addEventListener('click', getUserCredits);
+        generateImageBtn.addEventListener('click', generateImage);
+        generateVideoBtn.addEventListener('click', generateVideo);
+        generateJsonBtn.addEventListener('click', generateJson);
+        getGalleryBtn.addEventListener('click', getGallery);
+        getImagesBtn.addEventListener('click', getMyImages);
+        pingBtn.addEventListener('click', ping);
+        dbHealthBtn.addEventListener('click', dbHealth);
+        
+        // Initialize
+        disableMediaButtons();
+    </script>
+</body>
+</html>

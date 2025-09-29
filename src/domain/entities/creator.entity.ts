@@ -5,7 +5,7 @@ import { Content } from './content.entity';
 @Entity('creators')
 export class Creator {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  userId: string;
 
   @Column()
   name: string;
