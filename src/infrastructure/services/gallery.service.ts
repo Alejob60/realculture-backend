@@ -3,230 +3,110 @@ import {
   Logger,
   BadRequestException,
 } from '@nestjs/common';
-  import { InjectRepository } from '@nestjs/typeorm';
-  import { Repository, Between, MoreThan, IsNull } from 'typeorm';
-  import { Content } from '../../domain/entities/content.entity';
-  import { AzureBlobService } from './azure-blob.services';
-  import { GeneratedImageEntity } from '../../domain/entities/generated-image.entity';
-  import { GeneratedVideoEntity } from '../../domain/entities/generated-video.entity';
-  import { GeneratedAudioEntity } from '../../domain/entities/generated-audio.entity';
-  
-  @Injectable()
-  export class GalleryService {
-    private readonly logger = new Logger(GalleryService.name);
-  
-    constructor(
-      @InjectRepository(Content)
-      private readonly contentRepository: Repository<Content>,
-      @InjectRepository(GeneratedImageEntity)
-      private readonly generatedImageRepository: Repository<GeneratedImageEntity>,
-      @InjectRepository(GeneratedVideoEntity)
-      private readonly generatedVideoRepository: Repository<GeneratedVideoEntity>,
-      @InjectRepository(GeneratedAudioEntity)
-      private readonly generatedAudioRepository: Repository<GeneratedAudioEntity>,
-      private readonly azureBlobService: AzureBlobService,
-    ) {
-    }
-  
-    /**
-     * Obtiene la galería del usuario combinando datos de todas las tablas relevantes.
-     */
-    async getUserGallery(userId: string): Promise<
-      {
-        id: string;
-        title: string;
-        description: string;
-        type: string;
-        createdAt: Date;
-        sasUrl: string | null;
-        previewUrl: string | null;
-        duration?: number;
-        audioUrl?: string;
-        audioDuration?: number;
-        audioVoice?: string;
-      }[]
-    > {
-      // Validate userId
-      if (!userId) {
-        this.logger.error('User ID is undefined or null');
-        throw new BadRequestException('User ID is required');
-      }
-      
-      this.logger.log(`Consultando galería para el usuario: ${userId}`);
-  
-      // Get the first day of the current month
-      const dateFrom = new Date();
-      dateFrom.setDate(1);
-      dateFrom.setHours(0, 0, 0, 0);
-  
-      // Get the current date
-      const dateTo = new Date();
-      dateTo.setHours(23, 59, 59, 999);
-  
-      this.logger.log(`Fetching content from ${dateFrom.toISOString()} to ${dateTo.toISOString()}`);
-  
-      // For debugging purposes, let's also try fetching all content without date restrictions
-      // to see if there's any content at all
-      const allContents = await this.contentRepository
-      .createQueryBuilder('content')
-      .where('(content.userId = :userId OR content.creatorUserId = :userId)', { userId })
-      .andWhere('(content.expiresAt > :now OR content.expiresAt IS NULL)', { now: new Date() })
-      .orderBy('content.createdAt', 'DESC')
-      .getMany();
-    
-    this.logger.log(`Total content items without date filter: ${allContents.length}`);
-      
-      const allGeneratedImages = await this.generatedImageRepository.find({
-        where: [
-          {
-            user: { userId: userId },
-            // Only get non-expired content (expiresAt is null or in the future)
-            expiresAt: MoreThan(new Date()),
-          },
-          {
-            user: { userId: userId },
-            // Also get content with no expiration date
-            expiresAt: IsNull(),
-          }
-        ],
-        order: { createdAt: 'DESC' },
-        relations: ['user'],
-      });
-      
-      this.logger.log(`Total generated images without date filter: ${allGeneratedImages.length}`);
-      
-      const allGeneratedVideos = await this.generatedVideoRepository.find({
-        where: {
-          user: { userId: userId },
-          status: 'COMPLETED',
-        },
-        order: { createdAt: 'DESC' },
-        relations: ['user'],
-      });
-      
-      this.logger.log(`Total generated videos without date filter: ${allGeneratedVideos.length}`);
-      
-      const allGeneratedAudios = await this.generatedAudioRepository.find({
-        where: {
-          user: { userId: userId },
-        },
-        order: { createdAt: 'DESC' },
-        relations: ['user'],
-      });
-      
-      this.logger.log(`Total generated audios without date filter: ${allGeneratedAudios.length}`);
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, MoreThan, IsNull } from 'typeorm';
+import { Content } from '../../domain/entities/content.entity';
+import { AzureBlobService } from './azure-blob.services';
+import { GeneratedImageEntity } from '../../domain/entities/generated-image.entity';
+import { GeneratedVideoEntity } from '../../domain/entities/generated-video.entity';
+import { GeneratedAudioEntity } from '../../domain/entities/generated-audio.entity';
 
-    // Get content from contents table
+@Injectable()
+export class GalleryService {
+  private readonly logger = new Logger(GalleryService.name);
+
+  constructor(
+    @InjectRepository(Content)
+    private readonly contentRepository: Repository<Content>,
+    @InjectRepository(GeneratedImageEntity)
+    private readonly generatedImageRepository: Repository<GeneratedImageEntity>,
+    @InjectRepository(GeneratedVideoEntity)
+    private readonly generatedVideoRepository: Repository<GeneratedVideoEntity>,
+    @InjectRepository(GeneratedAudioEntity)
+    private readonly generatedAudioRepository: Repository<GeneratedAudioEntity>,
+    private readonly azureBlobService: AzureBlobService,
+  ) {
+  }
+
+  /**
+   * Obtiene la galería del usuario combinando datos de todas las tablas relevantes.
+   */
+  async getUserGallery(userId: string): Promise<
+    {
+      id: string;
+      title: string;
+      description: string;
+      type: string;
+      createdAt: Date;
+      sasUrl: string | null;
+      previewUrl: string | null;
+      duration?: number;
+      audioUrl?: string;
+      audioDuration?: number;
+      audioVoice?: string;
+    }[]
+  > {
+    // Validate userId
+    if (!userId) {
+      this.logger.error('User ID is undefined or null');
+      throw new BadRequestException('User ID is required');
+    }
+    
+    this.logger.log(`Consultando galería para el usuario: ${userId}`);
+
+    // Get content from contents table - most permissive query to ensure we get data
     const contents = await this.contentRepository
       .createQueryBuilder('content')
       .where('(content.userId = :userId OR content.creatorUserId = :userId)', { userId })
-      .andWhere('content.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
       .andWhere('(content.expiresAt > :now OR content.expiresAt IS NULL)', { now: new Date() })
       .orderBy('content.createdAt', 'DESC')
+      .limit(20) // Limit to 20 items to avoid overloading
       .getMany();
 
-    // Also get content from the last 30 days regardless of month boundaries
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const recentContents = await this.contentRepository
-      .createQueryBuilder('content')
-      .where('(content.userId = :userId OR content.creatorUserId = :userId)', { userId })
-      .andWhere('content.createdAt > :thirtyDaysAgo', { thirtyDaysAgo })
-      .andWhere('(content.expiresAt > :now OR content.expiresAt IS NULL)', { now: new Date() })
-      .orderBy('content.createdAt', 'DESC')
-      .getMany();
-
-    // Combine contents and recentContents, removing duplicates
-    const combinedContents = [...contents, ...recentContents].filter(
-      (content, index, self) => 
-        index === self.findIndex((c) => c.id === content.id)
-    );
-
-    // Get content from generated_images table
+    // Get content from generated_images table - most permissive query
     const generatedImages = await this.generatedImageRepository.find({
       where: [
         {
           user: { userId: userId },
-          createdAt: Between(dateFrom, dateTo),
           // Only get non-expired content (expiresAt is null or in the future)
           expiresAt: MoreThan(new Date()),
         },
         {
           user: { userId: userId },
-          createdAt: Between(dateFrom, dateTo),
           // Also get content with no expiration date
           expiresAt: IsNull(),
-        },
-        {
-          user: { userId: userId },
-          // Also get content from the last 30 days regardless of month boundaries
-          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
-          expiresAt: MoreThan(new Date()),
-        },
-        {
-          user: { userId: userId },
-          // Also get content from the last 30 days regardless of month boundaries
-          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
-          expiresAt: IsNull(),
-        },
-        {
-          user: { userId: userId },
-          // Most permissive query - get all content for this user
         }
       ],
       order: { createdAt: 'DESC' },
       relations: ['user'],
+      take: 20 // Limit to 20 items
     });
 
-    // Get content from generated_videos table
+    // Get content from generated_videos table - most permissive query
     const generatedVideos = await this.generatedVideoRepository.find({
-      where: [
-        {
-          user: { userId: userId },
-          createdAt: Between(dateFrom, dateTo),
-          status: 'COMPLETED',
-        },
-        {
-          user: { userId: userId },
-          // Also get content from the last 30 days regardless of month boundaries
-          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
-          status: 'COMPLETED',
-        },
-        {
-          user: { userId: userId },
-          status: 'COMPLETED',
-        }
-      ],
+      where: {
+        user: { userId: userId },
+      },
       order: { createdAt: 'DESC' },
       relations: ['user'],
+      take: 20 // Limit to 20 items
     });
 
-    // Get content from generated_audios table
-    const generatedAudios = await this.generatedAudioRepository.find({
-      where: [
-        {
-          user: { userId: userId },
-          createdAt: Between(dateFrom, dateTo),
-        },
-        {
-          user: { userId: userId },
-          // Also get content from the last 30 days regardless of month boundaries
-          createdAt: MoreThan(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
-        },
-        {
-          user: { userId: userId },
-        }
-      ],
-      order: { createdAt: 'DESC' },
-      relations: ['user'],
-    });
+    // Get content from generated_audios table - most permissive query
+    const generatedAudios = await this.generatedAudioRepository
+      .createQueryBuilder('generatedAudio')
+      .where('generatedAudio.userId = :userId', { userId })
+      .orderBy('generatedAudio.createdAt', 'DESC')
+      .limit(20) // Limit to 20 items
+      .getMany();
 
-    this.logger.log(`Found ${combinedContents.length} content items, ${generatedImages.length} generated images, ${generatedVideos.length} generated videos, and ${generatedAudios.length} generated audios for user ${userId}`);
+    this.logger.log(`Found ${contents.length} content items, ${generatedImages.length} generated images, ${generatedVideos.length} generated videos, and ${generatedAudios.length} generated audios for user ${userId}`);
 
     // Combine and format all content
     const allItems: any[] = [];
 
     // Process content from contents table
-    for (const item of combinedContents) {
+    for (const item of contents) {
       allItems.push({
         id: item.id,
         title: item.title || `Content generado el ${item.createdAt.toLocaleDateString()}`,
@@ -260,7 +140,7 @@ import {
       allItems.push({
         id: item.id,
         title: `Video generado el ${item.createdAt.toLocaleDateString()}`,
-        description: item.script || JSON.stringify(item.prompt) || '',
+        description: item.script || (item.prompt ? JSON.stringify(item.prompt) : '') || '',
         type: 'video',
         createdAt: item.createdAt,
         duration: null, // Video duration not stored in this entity
@@ -272,7 +152,7 @@ import {
     // Process content from generated_audios table
     for (const item of generatedAudios) {
       allItems.push({
-        id: item.userId, // Note: This entity uses userId as the primary key
+        id: item.id,
         title: `Audio generado el ${item.createdAt.toLocaleDateString()}`,
         description: item.prompt || '',
         type: 'audio',
@@ -285,9 +165,12 @@ import {
     // Sort all items by creation date (newest first)
     allItems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
+    // Take only the first 20 items to avoid overloading the frontend
+    const limitedItems = allItems.slice(0, 20);
+
     // Generate SAS URLs and preview URLs for all items
     const result = await Promise.all(
-      allItems.map(async (item) => {
+      limitedItems.map(async (item) => {
         let sasUrl: string | null = item.sasUrl;
         let previewUrl: string | null = item.previewUrl;
 
@@ -312,9 +195,11 @@ import {
               this.logger.log(`Generated SAS URL for ${item.type} content: ${blobPath}`);
             } else {
               this.logger.warn(`Blob not found for content ${item.id}: ${containerName}/${blobPath}`);
+              sasUrl = null; // Set to null if blob doesn't exist
             }
           } catch (error) {
             this.logger.error(`Error generating SAS URL for content ${item.id}:`, error);
+            sasUrl = null; // Set to null on error
           }
         }
 

@@ -7,6 +7,9 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  Get,
+  Query,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,9 +23,11 @@ import { Request } from 'express';
 import { UserService } from '../../infrastructure/services/user.service';
 import { AzureBlobService } from '../../infrastructure/services/azure-blob.services';
 import { MediaBridgeService } from '../../infrastructure/services/media-bridge.service';
+import { GeneratedVideoService } from '../../infrastructure/services/generated-video.service';
 import { v4 as uuid } from 'uuid';
 import { RequestWithUser } from 'src/types/request-with-user';
 import { GenerateVideoDto } from '../dto/video-generation.dto';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 const VIDEO_CREDITS = 25;
 
@@ -36,6 +41,7 @@ export class VideoController {
     private readonly userService: UserService,
     private readonly azureBlobService: AzureBlobService,
     private readonly mediaBridgeService: MediaBridgeService,
+    private readonly videoService: GeneratedVideoService,
   ) {}
 
   @Post('generate')
@@ -110,6 +116,24 @@ export class VideoController {
       // Update body with effective prompt for downstream processing
       const updatedBody = { ...body, prompt: effectivePrompt };
       const result = await this.handleVideoGeneration(updatedBody, userId);
+      
+      // Save video to database
+      if (result.videoUrl && result.script) {
+        const jobId = uuid(); // Generate a unique job ID
+        // Create a copy of the body without the prompt to avoid duplication
+        const { prompt, ...bodyWithoutPrompt } = body;
+        await this.videoService.saveVideo(
+          userId,
+          jobId,
+          { prompt: effectivePrompt, ...bodyWithoutPrompt },
+          result.script,
+          `video_${jobId}.mp4`,
+          result.videoUrl,
+          result.audioUrl || '',
+          result.subtitlesUrl || '',
+        );
+      }
+      
       const updatedUser = await this.userService.decrementCredits(userId, VIDEO_CREDITS);
 
       const response = {
@@ -129,6 +153,24 @@ export class VideoController {
         ? error
         : new HttpException('Error interno de video', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  @Get('my-videos')
+  @ApiOperation({ summary: 'Get generated videos' })
+  @ApiResponse({ status: 200, description: 'Returns generated videos.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getVideos(
+    @Req() req: RequestWithUser,
+    @Query(new ValidationPipe({ transform: true }))
+    paginationDto: PaginationDto,
+  ) {
+    const userId = req.user.id;
+    const videos = await this.videoService.getVideosByUserId(
+      userId,
+      paginationDto.page,
+      paginationDto.limit,
+    );
+    return { success: true, result: videos };
   }
 
   private async handleVideoGeneration(body: GenerateVideoDto, userId: string) {

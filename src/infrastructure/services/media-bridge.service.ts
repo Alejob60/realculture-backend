@@ -17,10 +17,21 @@ export class MediaBridgeService {
     process.env.VIDEO_GEN_URL || 'http://localhost:4000';
   private readonly VIDEO_SERVICE_URL = process.env.VIDEO_SERVICE_URL!;
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(private readonly httpService: HttpService) {
+    this.logger.log(`MediaBridgeService initialized with generatorUrl: ${this.generatorUrl}`);
+    this.logger.log(`MediaBridgeService initialized with VIDEO_SERVICE_URL: ${this.VIDEO_SERVICE_URL}`);
+  }
 
   private buildHeaders(token?: string) {
-    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+    this.logger.log(`Building headers, token provided: ${!!token}`);
+    if (token) {
+      this.logger.log(`Token length: ${token.length}`);
+      this.logger.log(`Token starts with Bearer: ${token.startsWith('Bearer ')}`);
+    }
+    
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    this.logger.log(`Building headers with token: ${!!token}, headers: ${JSON.stringify(headers)}`);
+    return { headers };
   }
 
   async generatePromoImage(
@@ -220,10 +231,19 @@ export class MediaBridgeService {
   }
   async generateVoice(data: any, token?: string) {
     try {
+      const config = {
+        headers: { 'Content-Type': 'application/json' } as any,
+      };
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      
+      this.logger.log(`Sending voice generation request with token: ${!!token}`);
+      
       const response = await axios.post(
         `${this.generatorUrl}/voice/generate`,
         data,
-        this.buildHeaders(token),
+        config,
       );
       return response.data;
     } catch (error) {
@@ -318,10 +338,47 @@ export class MediaBridgeService {
 
   async forward(endpoint: string, req: Request, payload: any): Promise<any> {
     const url = `${this.VIDEO_SERVICE_URL}/${endpoint}`;
-    const headers = {
-      Authorization: req.headers.authorization || '',
+    
+    // Extract token from authorization header
+    const authHeader = req.headers.authorization || '';
+    let headers: any = {
       'Content-Type': 'application/json',
     };
+    
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
+
+    // Log the request details for debugging
+    this.logger.log(`Forwarding request to ${url}`);
+    this.logger.log(`Authorization header present: ${!!authHeader}`);
+    this.logger.log(`Authorization header value: ${authHeader}`);
+    this.logger.log(`All request headers: ${JSON.stringify(req.headers)}`);
+    this.logger.log(`Payload: ${JSON.stringify(payload)}`);
+
+    // Validate payload
+    if (!payload || typeof payload !== 'object') {
+      this.logger.error(`Invalid payload: ${JSON.stringify(payload)}`);
+      throw new Error('Invalid payload format.');
+    }
+
+    // Additional validation for audio generation requests
+    if (endpoint === 'audio/generate') {
+      if (!payload.prompt || typeof payload.prompt !== 'string' || payload.prompt.length === 0) {
+        this.logger.error(`Invalid prompt in audio generation request: ${JSON.stringify(payload)}`);
+        throw new Error('Invalid prompt in audio generation request.');
+      }
+      
+      if (payload.duration && typeof payload.duration !== 'string') {
+        this.logger.error(`Invalid duration format in audio generation request: ${JSON.stringify(payload)}`);
+        throw new Error('Duration must be a string (e.g., "20s", "30s", "60s").');
+      }
+      
+      if (payload.style && typeof payload.style !== 'string') {
+        this.logger.error(`Invalid style format in audio generation request: ${JSON.stringify(payload)}`);
+        throw new Error('Style must be a string.');
+      }
+    }
 
     try {
       const response = await firstValueFrom(
@@ -331,25 +388,66 @@ export class MediaBridgeService {
       const data = response.data;
 
       if (!data || (!data.script && !data.result)) {
-        this.logger.error(`❌ Respuesta inesperada: ${JSON.stringify(data)}`);
-        throw new Error('Respuesta inesperada del servicio.');
+        this.logger.error(`❌ Unexpected response: ${JSON.stringify(data)}`);
+        throw new Error('Unexpected response from service.');
       }
 
       return data.result ?? data;
     } catch (error) {
-      this.logger.error(`❌ Error reenviando a ${url}`, error);
+      this.logger.error(`❌ Error forwarding to ${url}`, error);
+      
+      // Log more details about the error
+      if (error.response) {
+        this.logger.error(`Response status: ${error.response.status}`);
+        this.logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+        
+        // If it's a 400 error, provide a more specific error message
+        if (error.response.status === 400) {
+          const errorMessage = error.response.data?.message || JSON.stringify(error.response.data);
+          throw new Error(
+            `Bad request to microservice: ${errorMessage}`,
+          );
+        }
+        
+        // If it's a 401 error, provide a specific error message
+        if (error.response.status === 401) {
+          throw new Error(
+            'Unauthorized access to microservice. Please check authentication.',
+          );
+        }
+      }
+      
       throw new Error(
-        'Error al reenviar la solicitud al microservicio de video.',
+        'Error forwarding request to microservice: ' + (error.message || 'Unknown error'),
       );
     }
   }
+
   async generateAudio(data: any, token?: string) {
     try {
+      this.logger.log(`Generating audio with data: ${JSON.stringify(data)}`);
+      this.logger.log(`Token provided: ${!!token}`);
+      if (token) {
+        this.logger.log(`Token length: ${token.length}`);
+      }
+      this.logger.log(`Using generatorUrl: ${this.generatorUrl}`);
+      
+      const config = this.buildHeaders(token);
+      this.logger.log(`Config headers: ${JSON.stringify(config.headers)}`);
+      
+      const url = `${this.generatorUrl}/audio/generate`;
+      this.logger.log(`Full URL for audio generation: ${url}`);
+      
+      // Log the exact payload being sent
+      this.logger.log(`Sending payload to audio service: ${JSON.stringify(data)}`);
+      
       const response = await axios.post(
-        `${this.generatorUrl}/audio/generate`,
+        url,
         data,
-        this.buildHeaders(token),
+        config,
       );
+
+      this.logger.log(`Received response from audio service: ${JSON.stringify(response.data)}`);
 
       const result = response.data?.result ?? response.data;
 
@@ -369,18 +467,34 @@ export class MediaBridgeService {
         );
       }
 
-      return {
+      const finalResult = {
         script: result.script,
         audioUrl,
         duration: result.duration ?? data.duration ?? 20,
         filename: result.filename ?? null,
         generationId: result.generationId ?? null,
       };
+      
+      this.logger.log(`Final audio result: ${JSON.stringify(finalResult)}`);
+      
+      return finalResult;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         this.logger.error(
           `❌ Error al generar audio (bridge): ${error.response?.status} - ${JSON.stringify(error.response?.data)}`,
         );
+        this.logger.error(
+          `❌ Error details - message: ${error.message}, code: ${error.code}, status: ${error.response?.status}`,
+        );
+        
+        // Log the request details
+        if (error.config) {
+          this.logger.error(`❌ Request URL: ${error.config.url}`);
+          this.logger.error(`❌ Request method: ${error.config.method}`);
+          this.logger.error(`❌ Request headers: ${JSON.stringify(error.config.headers)}`);
+          this.logger.error(`❌ Request data: ${JSON.stringify(error.config.data)}`);
+        }
+        
         throw new HttpException(
           error.response?.data,
           error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,

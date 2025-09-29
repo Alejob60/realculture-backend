@@ -12,12 +12,13 @@ import { UserModule } from './infrastructure/modules/user.module';
 import { AiModule } from './infrastructure/modules/ai.module';
 import { InfluencerModule } from './infrastructure/modules/influencer.module';
 import { MediaModule } from './infrastructure/modules/media.module';
-import { AudioModule } from './infrastructure/modules/audio.module';
+// import { AudioModule } from './infrastructure/modules/audio.module';  // Removed as audio is now handled by MediaController
 import { VideoModule } from './infrastructure/modules/video.module';
 import { PromptJsonService } from './infrastructure/services/prompt-json.service';
 import { PromptJsonController } from './interfaces/controllers/prompt-json.controller';
 import { GalleryModule } from './infrastructure/modules/gallery.module';
 import { DataCleanupModule } from './infrastructure/modules/data-cleanup.module';
+import { MediaProcessingModule } from './application/media/media.module'; // Add our new module
 // Import all entities
 import { UserEntity } from './domain/entities/user.entity';
 import { Content } from './domain/entities/content.entity';
@@ -28,6 +29,7 @@ import { GeneratedImageEntity } from './domain/entities/generated-image.entity';
 import { GeneratedAudioEntity } from './domain/entities/generated-audio.entity';
 import { Product } from './domain/entities/product.entity';
 import { Creator } from './domain/entities/creator.entity';
+import { MergedMediaEntity } from './domain/entities/merged-media.entity'; // Add our new entity
 
 @Module({
   imports: [
@@ -49,9 +51,10 @@ import { Creator } from './domain/entities/creator.entity';
           GeneratedVideoEntity,
           GeneratedMusicEntity,
           GeneratedImageEntity,
-          GeneratedAudioEntity,
+          GeneratedAudioEntity,  // Re-enabled as we've fixed the entity
           Product,
           Creator,
+          MergedMediaEntity, // Add our new entity
         ],
         synchronize: false,
         logging: true,
@@ -80,7 +83,8 @@ import { Creator } from './domain/entities/creator.entity';
     AiModule,
     InfluencerModule,
     MediaModule,
-    AudioModule,
+    MediaProcessingModule, // Add our new module
+    // AudioModule,  // Removed as audio is now handled by MediaController
     VideoModule, // Añadir el módulo de Video
     GalleryModule,
     DataCleanupModule,

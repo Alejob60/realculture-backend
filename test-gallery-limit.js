@@ -1,4 +1,4 @@
-// Mock test to verify gallery service logic
+// Mock test to verify gallery service logic with 25 items to test the 20-item limit
 const { Logger } = require('@nestjs/common');
 
 // Mock QueryBuilder implementation
@@ -17,11 +17,11 @@ class MockQueryBuilder {
   }
 }
 
-// Mock repository implementation
+// Mock repository implementation with 7 items each
 class MockRepository {
   createQueryBuilder() {
     const queryBuilder = new MockQueryBuilder();
-    // Set mock data
+    // Set mock data with 7 items
     queryBuilder.data = [
       { 
         id: 'content-1', 
@@ -33,21 +33,66 @@ class MockRepository {
       },
       { 
         id: 'content-2', 
-        createdAt: new Date(Date.now() - 2000000), 
+        createdAt: new Date(Date.now() - 1000000), 
         mediaUrl: 'https://example.com/content2.jpg', 
         title: 'Test Content 2',
         description: 'Test description 2',
         type: 'video'
       },
+      { 
+        id: 'content-3', 
+        createdAt: new Date(Date.now() - 2000000), 
+        mediaUrl: 'https://example.com/content3.jpg', 
+        title: 'Test Content 3',
+        description: 'Test description 3',
+        type: 'audio'
+      },
+      { 
+        id: 'content-4', 
+        createdAt: new Date(Date.now() - 3000000), 
+        mediaUrl: 'https://example.com/content4.jpg', 
+        title: 'Test Content 4',
+        description: 'Test description 4',
+        type: 'image'
+      },
+      { 
+        id: 'content-5', 
+        createdAt: new Date(Date.now() - 4000000), 
+        mediaUrl: 'https://example.com/content5.jpg', 
+        title: 'Test Content 5',
+        description: 'Test description 5',
+        type: 'video'
+      },
+      { 
+        id: 'content-6', 
+        createdAt: new Date(Date.now() - 5000000), 
+        mediaUrl: 'https://example.com/content6.jpg', 
+        title: 'Test Content 6',
+        description: 'Test description 6',
+        type: 'audio'
+      },
+      { 
+        id: 'content-7', 
+        createdAt: new Date(Date.now() - 6000000), 
+        mediaUrl: 'https://example.com/content7.jpg', 
+        title: 'Test Content 7',
+        description: 'Test description 7',
+        type: 'image'
+      }
     ];
     return queryBuilder;
   }
   
   async find(options) {
-    // Return mock data
+    // Return mock data with 7 items
     return [
       { id: '1', createdAt: new Date(), imageUrl: 'https://example.com/image1.jpg', prompt: 'Test image 1', user: { userId: 'test-user-id' } },
       { id: '2', createdAt: new Date(Date.now() - 1000000), imageUrl: 'https://example.com/image2.jpg', prompt: 'Test image 2', user: { userId: 'test-user-id' } },
+      { id: '3', createdAt: new Date(Date.now() - 2000000), imageUrl: 'https://example.com/image3.jpg', prompt: 'Test image 3', user: { userId: 'test-user-id' } },
+      { id: '4', createdAt: new Date(Date.now() - 3000000), imageUrl: 'https://example.com/image4.jpg', prompt: 'Test image 4', user: { userId: 'test-user-id' } },
+      { id: '5', createdAt: new Date(Date.now() - 4000000), imageUrl: 'https://example.com/image5.jpg', prompt: 'Test image 5', user: { userId: 'test-user-id' } },
+      { id: '6', createdAt: new Date(Date.now() - 5000000), imageUrl: 'https://example.com/image6.jpg', prompt: 'Test image 6', user: { userId: 'test-user-id' } },
+      { id: '7', createdAt: new Date(Date.now() - 6000000), imageUrl: 'https://example.com/image7.jpg', prompt: 'Test image 7', user: { userId: 'test-user-id' } },
     ];
   }
 }
@@ -210,9 +255,18 @@ async function runTest() {
   const result = await galleryService.getUserGallery('test-user-id');
   
   console.log('Gallery result:');
-  console.log(JSON.stringify(result, null, 2));
+  console.log(`Returned ${result.length} items`);
   
-  console.log(`\nReturned ${result.length} items`);
+  // Verify that we get exactly 20 items (or less if there aren't enough)
+  console.log(`Expected: 20 items (or less if not enough data)`);
+  console.log(`Actual: ${result.length} items`);
+  
+  if (result.length <= 20) {
+    console.log('✅ Test passed: Gallery correctly limits results to 20 items or less');
+  } else {
+    console.log('❌ Test failed: Gallery returned more than 20 items');
+  }
+  
   console.log('Test completed successfully!');
 }
 

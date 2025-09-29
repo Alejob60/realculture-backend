@@ -7,4 +7,9 @@ export class GenerateAudioDto {
   @IsOptional()
   @IsIn(['20s', '30s', '60s'])
   duration?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['promotional', 'narrative', 'casual'])
+  style?: string;
 }

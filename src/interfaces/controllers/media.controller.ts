@@ -30,6 +30,7 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { UseServiceUseCase } from '../../application/use-cases/use-service.use-case';
 import { UserService } from '../../infrastructure/services/user.service';
 import { GeneratedImageService } from '../../infrastructure/services/generated-image.service';
+import { GeneratedAudioService } from '../../infrastructure/services/generated-audio.service';
 import { HttpService } from '@nestjs/axios';
 import { MediaBridgeService } from '../../infrastructure/services/media-bridge.service';
 import { Public } from '../../common/decorators/public.decorator';
@@ -48,6 +49,7 @@ export class MediaController {
     private readonly mediaBridgeService: MediaBridgeService,
     private readonly userService: UserService,
     private readonly imageService: GeneratedImageService,
+    private readonly audioService: GeneratedAudioService,
     private readonly httpService: HttpService,
     private readonly azureBlobService: AzureBlobService,
   ) {}
@@ -68,7 +70,7 @@ export class MediaController {
   @ApiOperation({ summary: 'Generate media content' })
   @ApiParam({
     name: 'type',
-    enum: ['image', 'video', 'voice', 'music', 'agent'],
+    enum: ['image', 'video', 'voice', 'music', 'agent', 'audio'],
     description: 'Type of media to generate',
   })
   @ApiBody({
@@ -87,17 +89,30 @@ export class MediaController {
     @Req() req: RequestWithUser,
     @Body() body: any,
   ) {
+    // Log all request details for debugging
+    this.logger.log(`Received request for media type: ${type}`);
+    this.logger.log(`Request headers: ${JSON.stringify(req.headers)}`);
+    this.logger.log(`Request body: ${JSON.stringify(body)}`);
+    this.logger.log(`User object: ${JSON.stringify(req.user)}`);
+    
     const { userId, token } = this.extractUserData(req);
+    
+    this.logger.log(`Extracted userId: ${userId}`);
+    this.logger.log(`Extracted token: ${token ? 'PRESENT' : 'MISSING'}`);
+    if (token) {
+      this.logger.log(`Token length: ${token.length}`);
+    }
 
     const typeMap: Record<
       string,
-      'image' | 'video' | 'tts' | 'voice' | 'music' | 'ai-agent'
+      'image' | 'video' | 'tts' | 'voice' | 'music' | 'ai-agent' | 'audio'
     > = {
       image: 'image',
       video: 'video',
       voice: 'voice',
       music: 'music',
       agent: 'ai-agent',
+      audio: 'audio',
     };
 
     const usageKey = typeMap[type];
@@ -116,6 +131,7 @@ export class MediaController {
       voice: this.mediaBridgeService.generateVoice,
       music: this.mediaBridgeService.generateMusic,
       agent: this.mediaBridgeService.generateAgent,
+      audio: this.mediaBridgeService.generateAudio,
     };
 
     const generate = serviceMap[type];
@@ -148,7 +164,33 @@ export class MediaController {
           plan,
         );
       }
+    } else if (type === 'audio') {
+      // For audio service, pass the token properly
+      this.logger.log(`Calling service for type: ${type} with token: ${token ? 'PRESENT' : 'MISSING'}`);
+      this.logger.log(`Passing body to service: ${JSON.stringify(body)}`);
+      result = await generate.call(this.mediaBridgeService, body, token);
+      
+      // Save audio to database
+      const audioUrl = result?.audioUrl || result?.result?.audioUrl;
+      const prompt = body.prompt;
+      
+      if (audioUrl && prompt) {
+        await this.audioService.saveAudio(
+          userId,
+          audioUrl,
+          prompt,
+        );
+      }
+      
+      // For audio service, the result is returned directly, not wrapped in a result property
+      // So we need to wrap it for consistency with the response format
+      if (result && !result.result) {
+        result = { result: result };
+      }
     } else {
+      // For other services, pass the token properly
+      this.logger.log(`Calling service for type: ${type} with token: ${token ? 'PRESENT' : 'MISSING'}`);
+      this.logger.log(`Passing body to service: ${JSON.stringify(body)}`);
       result = await generate.call(this.mediaBridgeService, body, token);
     }
 
@@ -162,7 +204,7 @@ export class MediaController {
     return {
       success: true,
       message: `✅ ${type.toUpperCase()} generado correctamente`,
-      result: { ...(result?.result || {}) },
+      result: { ...(result?.result || result || {}) }, // Handle both wrapped and unwrapped results
       credits: updatedUser.credits,
     };
   }
@@ -182,6 +224,24 @@ export class MediaController {
       paginationDto,
     );
     return { success: true, result: images };
+  }
+
+  @Get('audios')
+  @ApiOperation({ summary: 'Get generated audios' })
+  @ApiResponse({ status: 200, description: 'Returns generated audios.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getAudios(
+    @Req() req: RequestWithUser,
+    @Query(new ValidationPipe({ transform: true }))
+    paginationDto: PaginationDto,
+  ) {
+    const userId = req.user.id;
+    const audios = await this.audioService.getAudiosByUserId(
+      userId,
+      paginationDto.page,
+      paginationDto.limit,
+    );
+    return { success: true, result: audios };
   }
 
   @Get('proxy-image')

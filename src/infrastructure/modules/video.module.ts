@@ -1,4 +1,3 @@
-//
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios'; // Importar HttpModule
@@ -12,6 +11,7 @@ import { AzureBlobModule } from './azure-blob.module';
 import { MediaModule } from './media.module';
 import { UserService } from '../services/user.service';
 import { AzureBlobService } from '../services/azure-blob.services';
+import { GeneratedVideoModule } from './generated-video.module';
 
 @Module({
   imports: [
@@ -22,10 +22,9 @@ import { AzureBlobService } from '../services/azure-blob.services';
     AiModule, // Re-añadir AiModule
     AzureBlobModule,
     MediaModule,
+    GeneratedVideoModule,
   ],
   controllers: [VideoController],
   providers: [VideoService, UserService, AzureBlobService],
 })
 export class VideoModule {}
-
-

@@ -15,7 +15,8 @@ export class UseServiceUseCase {
       | 'ai-agent'
       | 'voice'
       | 'music'
-      | 'agent',
+      | 'agent'
+      | 'audio',
   ) {
     const costMap = {
       image: 10,
@@ -26,6 +27,7 @@ export class UseServiceUseCase {
       subtitles: 5,
       'ai-agent': 150,
       agent: 150, // si aún lo usas
+      audio: 10, // Adding audio support with a cost of 10 credits
     };
 
     const user = await this.userService.findById(userId); // Ensure findById exists and returns a typed User object

@@ -17,6 +17,8 @@ import { UserRepository } from './user.repository';
 import { ContentRepository } from './content.repository';
 import { InfluencerRepository } from './influencer.repository';
 import { GeneratedImageRepository } from './generated-image.repository';
+import { GeneratedAudioRepository } from './generated-audio.repository';
+import { GeneratedVideoRepository } from './generated-video.repository';
 
 @Module({
   imports: [
@@ -37,12 +39,16 @@ import { GeneratedImageRepository } from './generated-image.repository';
     ContentRepository,
     InfluencerRepository,
     GeneratedImageRepository,
+    GeneratedAudioRepository,
+    GeneratedVideoRepository,
   ],
   exports: [
     UserRepository,
     ContentRepository,
     InfluencerRepository,
     GeneratedImageRepository,
+    GeneratedAudioRepository,
+    GeneratedVideoRepository,
   ],
 })
 export class DatabaseModule {}

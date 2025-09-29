@@ -11,11 +11,7 @@ import { UserEntity } from './user.entity';
 @Entity('generated_audios')
 export class GeneratedAudioEntity {
   @PrimaryGeneratedColumn('uuid')
-  userId: string;
-
-  @ManyToOne(() => UserEntity, (user) => user.generatedAudios)
-  @JoinColumn({ name: 'user_id' }) // Llave foránea explícita
-  user: UserEntity;
+  id: string;
 
   @Column()
   audioUrl: string;
@@ -25,4 +21,9 @@ export class GeneratedAudioEntity {
 
   @CreateDateColumn()
   createdAt: Date;
+
+  // FK hacia UserEntity, que tiene el id del usuario
+  @ManyToOne(() => UserEntity, (user) => user.generatedAudios)
+  @JoinColumn({ name: 'user_id' })
+  user: UserEntity;
 }
